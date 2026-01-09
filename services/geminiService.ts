@@ -28,7 +28,7 @@ REGRAS:
 `;
 
 export const analyzePayroll = async (data: PayrollData[]): Promise<string> => {
-  // Use process.env.API_KEY directly as required by guidelines
+  // Inicialização dentro da função para garantir acesso à chave de API no momento da chamada
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const formattedData = data.map(d => 
@@ -51,7 +51,6 @@ export const analyzePayroll = async (data: PayrollData[]): Promise<string> => {
       },
     });
 
-    // Access .text property directly
     return response.text || "Não foi possível gerar a análise no momento.";
   } catch (error) {
     console.error("Error generating analysis:", error);
