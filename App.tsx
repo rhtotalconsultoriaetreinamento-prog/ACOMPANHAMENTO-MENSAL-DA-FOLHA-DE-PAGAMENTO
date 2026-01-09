@@ -2,7 +2,9 @@
 import React, { useState } from 'react';
 import DataForm from './components/DataForm';
 import AnalysisView from './components/AnalysisView';
-import { PayrollData, AppTab } from './types';
+import UserManagement from './components/UserManagement';
+import Login from './components/Login';
+import { PayrollData, AppTab, AuthState } from './types';
 import { analyzePayroll } from './services/geminiService';
 import { 
   BrainCircuit, 
@@ -11,16 +13,30 @@ import {
   PlusCircle, 
   Info,
   Menu,
-  X
+  X,
+  Users,
+  LogOut
 } from 'lucide-react';
 
 const App: React.FC = () => {
+  const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false, user: null });
   const [activeTab, setActiveTab] = useState<AppTab>('lancamento');
   const [payrollData, setPayrollData] = useState<PayrollData[]>([]);
   const [analysis, setAnalysis] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string>();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const handleLogin = (name: string, role: 'admin' | 'reseller') => {
+    setAuth({
+      isAuthenticated: true,
+      user: { name, role }
+    });
+  };
+
+  const handleLogout = () => {
+    setAuth({ isAuthenticated: false, user: null });
+  };
 
   const handleGenerateAnalysis = async () => {
     if (payrollData.length === 0) return;
@@ -47,6 +63,10 @@ const App: React.FC = () => {
     setAnalysis('');
   };
 
+  if (!auth.isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       {/* Sidebar Mobile Toggle */}
@@ -67,7 +87,7 @@ const App: React.FC = () => {
       `}>
         <div className="h-full flex flex-col">
           <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-            <div className="bg-blue-600 p-2 rounded-lg">
+            <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-600/10">
               <BrainCircuit className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -91,9 +111,30 @@ const App: React.FC = () => {
               <LayoutDashboard className="w-5 h-5" />
               Dashboard
             </button>
+
+            {auth.user?.role === 'admin' && (
+              <button 
+                onClick={() => {setActiveTab('usuarios'); setIsMenuOpen(false);}}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'usuarios' ? 'bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800'}`}
+              >
+                <Users className="w-5 h-5" />
+                Gerenciar Revendas
+              </button>
+            )}
           </nav>
 
-          <div className="p-4 border-t border-slate-800">
+          <div className="p-4 border-t border-slate-800 space-y-4">
+            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Logado como</p>
+              <p className="text-sm font-bold text-slate-200 truncate">{auth.user?.name}</p>
+              <button 
+                onClick={handleLogout}
+                className="mt-3 w-full flex items-center justify-center gap-2 text-xs text-red-400 hover:text-red-300 transition-colors font-bold py-2 bg-red-500/10 rounded-lg"
+              >
+                <LogOut className="w-3 h-3" /> Sair
+              </button>
+            </div>
+
             <button 
               onClick={handleGenerateAnalysis}
               disabled={payrollData.length === 0 || isGenerating}
@@ -102,9 +143,10 @@ const App: React.FC = () => {
               {isGenerating ? 'Analisando...' : 'Atualizar Análise IA'}
               <ChevronRight className="w-4 h-4" />
             </button>
+            
             <button 
               onClick={loadExample}
-              className="w-full mt-2 py-2 text-xs text-slate-500 hover:text-slate-300 font-medium transition-colors"
+              className="w-full text-xs text-slate-500 hover:text-slate-300 font-medium transition-colors"
             >
               Carregar Dados Exemplo
             </button>
@@ -119,27 +161,34 @@ const App: React.FC = () => {
             <h2 className="text-3xl font-black text-slate-900">
               {activeTab === 'lancamento' && 'Alimentação de Dados'}
               {activeTab === 'dashboard' && 'Estratégia & BI'}
+              {activeTab === 'usuarios' && 'Gestão de Revenda'}
             </h2>
             <p className="text-slate-500 mt-1">
               {activeTab === 'lancamento' && 'Gerencie o histórico financeiro da sua folha.'}
               {activeTab === 'dashboard' && 'Insights gerenciais e comparativos dinâmicos.'}
+              {activeTab === 'usuarios' && 'Administre os acessos e licenças das suas revendas.'}
             </p>
           </div>
           <div className="hidden md:flex items-center gap-3 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
              <Info className="w-4 h-4 text-blue-500" />
-             <span className="text-xs font-bold text-slate-600">{payrollData.length} meses registrados</span>
+             <span className="text-xs font-bold text-slate-600">
+               {activeTab === 'usuarios' ? 'Gestão de Licenças' : `${payrollData.length} meses registrados`}
+             </span>
           </div>
         </header>
 
-        {activeTab === 'lancamento' && <DataForm onDataChange={setPayrollData} data={payrollData} />}
-        {activeTab === 'dashboard' && (
-          <AnalysisView 
-            data={payrollData} 
-            analysis={analysis} 
-            isGenerating={isGenerating} 
-            error={error} 
-          />
-        )}
+        <div className="max-w-7xl mx-auto">
+          {activeTab === 'lancamento' && <DataForm onDataChange={setPayrollData} data={payrollData} />}
+          {activeTab === 'dashboard' && (
+            <AnalysisView 
+              data={payrollData} 
+              analysis={analysis} 
+              isGenerating={isGenerating} 
+              error={error} 
+            />
+          )}
+          {activeTab === 'usuarios' && <UserManagement />}
+        </div>
       </main>
     </div>
   );

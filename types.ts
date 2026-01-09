@@ -11,9 +11,26 @@ export interface PayrollData {
   commissionedValue: number;
 }
 
-export type AppTab = 'lancamento' | 'dashboard';
+export interface ResellerUser {
+  id: string;
+  name: string;
+  email: string;
+  company: string;
+  status: 'Ativo' | 'Inativo';
+  expirationDate: string;
+}
+
+export type AppTab = 'lancamento' | 'dashboard' | 'usuarios';
 
 export interface ComparisonData {
   monthA?: PayrollData;
   monthB?: PayrollData;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: {
+    name: string;
+    role: 'admin' | 'reseller';
+  } | null;
 }
