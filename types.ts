@@ -11,6 +11,13 @@ export interface PayrollData {
   commissionedValue: number;
 }
 
+export interface CompanyData {
+  id: string;
+  name: string;
+  cnpj: string;
+  payrollEntries: PayrollData[];
+}
+
 export interface ResellerUser {
   id: string;
   name: string;
@@ -20,7 +27,7 @@ export interface ResellerUser {
   expirationDate: string;
 }
 
-export type AppTab = 'lancamento' | 'dashboard' | 'usuarios';
+export type AppTab = 'empresa' | 'lancamento' | 'dashboard' | 'usuarios';
 
 export interface ComparisonData {
   monthA?: PayrollData;
