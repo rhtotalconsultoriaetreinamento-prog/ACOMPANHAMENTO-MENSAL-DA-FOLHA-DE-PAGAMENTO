@@ -66,31 +66,40 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
     onDataChange(data.filter(d => d.id !== id));
   };
 
+  // Cálculo dos Totais Gerais para o rodapé da tabela
+  const totals = data.reduce((acc, curr) => ({
+    effectiveValue: acc.effectiveValue + curr.effectiveValue,
+    contractedValue: acc.contractedValue + curr.contractedValue,
+    commissionedValue: acc.commissionedValue + curr.commissionedValue,
+    totalValue: acc.totalValue + curr.totalValue,
+    totalCount: acc.totalCount + (curr.effectiveCount + curr.contractedCount + curr.commissionedCount)
+  }), { effectiveValue: 0, contractedValue: 0, commissionedValue: 0, totalValue: 0, totalCount: 0 });
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
         <div>
-          <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
-            <Calculator className="w-5 h-5 text-blue-600" />
+          <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+            <Calculator className="w-6 h-6 text-blue-600" />
             Lançamento Mensal
           </h2>
-          <p className="text-sm text-slate-500 mt-1">Detalhe quantidades e valores por vínculo.</p>
+          <p className="text-base text-slate-500 mt-1 font-medium">Detalhe quantidades e valores por vínculo.</p>
         </div>
         <div className="text-right">
-          <p className="text-xs font-bold text-slate-400 uppercase">Total Estimado</p>
-          <p className="text-xl font-bold text-blue-600">R$ {newEntry.totalValue.toLocaleString('pt-BR')}</p>
+          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Estimado</p>
+          <p className="text-3xl font-black text-blue-600">R$ {newEntry.totalValue.toLocaleString('pt-BR')}</p>
         </div>
       </div>
 
-      <div className="p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="p-8 space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="md:col-span-2 grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mês / Competência</label>
+              <label className="block text-xs font-black text-slate-500 uppercase mb-2 ml-1">Mês / Competência</label>
               <select 
                 value={selectedMonth}
                 onChange={e => setSelectedMonth(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 outline-none transition-all bg-white cursor-pointer shadow-sm"
               >
                 {months.map(m => (
                   <option key={m} value={m}>{m}</option>
@@ -98,11 +107,11 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ano</label>
+              <label className="block text-xs font-black text-slate-500 uppercase mb-2 ml-1">Ano</label>
               <select 
                 value={selectedYear}
                 onChange={e => setSelectedYear(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 outline-none transition-all bg-white cursor-pointer shadow-sm"
               >
                 {years.map(y => (
                   <option key={y} value={y}>{y}</option>
@@ -112,77 +121,89 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
           </div>
 
           {/* Efetivos */}
-          <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 space-y-3">
-            <h4 className="text-xs font-bold text-blue-700 uppercase flex items-center gap-1">
-              <Users className="w-3 h-3" /> Efetivos (CLT)
+          <div className="p-5 bg-blue-50/80 rounded-2xl border border-blue-100 space-y-4 shadow-sm transition-all hover:shadow-md">
+            <h4 className="text-sm font-black text-blue-800 uppercase flex items-center gap-2">
+              <Users className="w-4 h-4" /> Efetivos (CLT)
             </h4>
-            <div className="grid grid-cols-2 gap-2">
-              <input 
-                type="number" 
-                placeholder="Qtd"
-                title="Quantidade de Efetivos"
-                value={newEntry.effectiveCount || ''}
-                onChange={e => setNewEntry({...newEntry, effectiveCount: Number(e.target.value)})}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm outline-none focus:border-blue-500"
-              />
-              <input 
-                type="number" 
-                placeholder="Valor R$"
-                title="Valor Total Efetivos"
-                value={newEntry.effectiveValue || ''}
-                onChange={e => setNewEntry({...newEntry, effectiveValue: Number(e.target.value)})}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm outline-none focus:border-blue-500"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <span className="text-[10px] font-bold text-blue-600 uppercase mb-1 block ml-1">Qtd</span>
+                <input 
+                  type="number" 
+                  placeholder="0"
+                  value={newEntry.effectiveCount || ''}
+                  onChange={e => setNewEntry({...newEntry, effectiveCount: Number(e.target.value)})}
+                  className="w-full px-3 py-2 border border-blue-200 rounded-lg text-base font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-blue-600 uppercase mb-1 block ml-1">Valor R$</span>
+                <input 
+                  type="number" 
+                  placeholder="0,00"
+                  value={newEntry.effectiveValue || ''}
+                  onChange={e => setNewEntry({...newEntry, effectiveValue: Number(e.target.value)})}
+                  className="w-full px-3 py-2 border border-blue-200 rounded-lg text-base font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
           </div>
 
           {/* Contratados */}
-          <div className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100 space-y-3">
-            <h4 className="text-xs font-bold text-emerald-700 uppercase flex items-center gap-1">
-              <Briefcase className="w-3 h-3" /> Contratados / PJ
+          <div className="p-5 bg-emerald-50/80 rounded-2xl border border-emerald-100 space-y-4 shadow-sm transition-all hover:shadow-md">
+            <h4 className="text-sm font-black text-emerald-800 uppercase flex items-center gap-2">
+              <Briefcase className="w-4 h-4" /> Contratados / PJ
             </h4>
-            <div className="grid grid-cols-2 gap-2">
-              <input 
-                type="number" 
-                placeholder="Qtd"
-                title="Quantidade de Contratados"
-                value={newEntry.contractedCount || ''}
-                onChange={e => setNewEntry({...newEntry, contractedCount: Number(e.target.value)})}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm outline-none focus:border-emerald-500"
-              />
-              <input 
-                type="number" 
-                placeholder="Valor R$"
-                title="Valor Total Contratados"
-                value={newEntry.contractedValue || ''}
-                onChange={e => setNewEntry({...newEntry, contractedValue: Number(e.target.value)})}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm outline-none focus:border-emerald-500"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <span className="text-[10px] font-bold text-emerald-600 uppercase mb-1 block ml-1">Qtd</span>
+                <input 
+                  type="number" 
+                  placeholder="0"
+                  value={newEntry.contractedCount || ''}
+                  onChange={e => setNewEntry({...newEntry, contractedCount: Number(e.target.value)})}
+                  className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-base font-bold outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-emerald-600 uppercase mb-1 block ml-1">Valor R$</span>
+                <input 
+                  type="number" 
+                  placeholder="0,00"
+                  value={newEntry.contractedValue || ''}
+                  onChange={e => setNewEntry({...newEntry, contractedValue: Number(e.target.value)})}
+                  className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-base font-bold outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
             </div>
           </div>
 
           {/* Comissionados */}
-          <div className="p-3 bg-amber-50/50 rounded-lg border border-amber-100 space-y-3">
-            <h4 className="text-xs font-bold text-amber-700 uppercase flex items-center gap-1">
-              <DollarSign className="w-3 h-3" /> Comissionados
+          <div className="p-5 bg-amber-50/80 rounded-2xl border border-amber-100 space-y-4 shadow-sm transition-all hover:shadow-md">
+            <h4 className="text-sm font-black text-amber-800 uppercase flex items-center gap-2">
+              <DollarSign className="w-4 h-4" /> Comissionados
             </h4>
-            <div className="grid grid-cols-2 gap-2">
-              <input 
-                type="number" 
-                placeholder="Qtd"
-                title="Quantidade de Comissionados"
-                value={newEntry.commissionedCount || ''}
-                onChange={e => setNewEntry({...newEntry, commissionedCount: Number(e.target.value)})}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm outline-none focus:border-amber-500"
-              />
-              <input 
-                type="number" 
-                placeholder="Valor R$"
-                title="Valor Total Comissionados"
-                value={newEntry.commissionedValue || ''}
-                onChange={e => setNewEntry({...newEntry, commissionedValue: Number(e.target.value)})}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm outline-none focus:border-amber-500"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <span className="text-[10px] font-bold text-amber-600 uppercase mb-1 block ml-1">Qtd</span>
+                <input 
+                  type="number" 
+                  placeholder="0"
+                  value={newEntry.commissionedCount || ''}
+                  onChange={e => setNewEntry({...newEntry, commissionedCount: Number(e.target.value)})}
+                  className="w-full px-3 py-2 border border-amber-200 rounded-lg text-base font-bold outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-amber-600 uppercase mb-1 block ml-1">Valor R$</span>
+                <input 
+                  type="number" 
+                  placeholder="0,00"
+                  value={newEntry.commissionedValue || ''}
+                  onChange={e => setNewEntry({...newEntry, commissionedValue: Number(e.target.value)})}
+                  className="w-full px-3 py-2 border border-amber-200 rounded-lg text-base font-bold outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
             </div>
           </div>
 
@@ -190,46 +211,61 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
             <button 
               onClick={handleAdd}
               disabled={newEntry.totalValue <= 0}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-600/20 active:scale-95 text-lg"
             >
-              <Plus className="w-5 h-5" />
-              Adicionar Mês
+              <Plus className="w-6 h-6" />
+              Adicionar Competência
             </button>
           </div>
         </div>
 
-        <div className="mt-8">
-          <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
-            <Calendar className="w-4 h-4" /> Histórico Lançado
+        <div className="mt-12">
+          <h3 className="text-sm font-black text-slate-400 uppercase mb-5 flex items-center gap-3 tracking-[0.2em]">
+            <Calendar className="w-5 h-5 text-blue-500" /> Histórico Lançado
           </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500 border-y border-slate-100">
+          <div className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm">
+            <table className="w-full text-left">
+              <thead className="bg-slate-900 text-white border-b border-slate-800">
                 <tr>
-                  <th className="py-2 px-2 font-semibold">Período</th>
-                  <th className="py-2 px-2 font-semibold text-right">Efet. (R$)</th>
-                  <th className="py-2 px-2 font-semibold text-right">Cont. (R$)</th>
-                  <th className="py-2 px-2 font-semibold text-right">Comis. (R$)</th>
-                  <th className="py-2 px-2 font-semibold text-right">Total</th>
-                  <th className="py-2 px-2 text-right"></th>
+                  <th className="py-4 px-4 font-black text-xs uppercase tracking-widest">Período</th>
+                  <th className="py-4 px-4 font-black text-xs uppercase tracking-widest text-center text-red-400">Qtd</th>
+                  <th className="py-4 px-4 font-black text-xs uppercase tracking-widest text-right">Efet. (R$)</th>
+                  <th className="py-4 px-4 font-black text-xs uppercase tracking-widest text-right">Cont. (R$)</th>
+                  <th className="py-4 px-4 font-black text-xs uppercase tracking-widest text-right">Comis. (R$)</th>
+                  <th className="py-4 px-4 font-black text-xs uppercase tracking-widest text-right">Total</th>
+                  <th className="py-4 px-4 text-right"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-slate-100">
                 {data.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-3 px-2 font-medium">{item.monthYear}</td>
-                    <td className="py-3 px-2 text-right text-slate-600">{(item.effectiveValue / 1000).toFixed(1)}k</td>
-                    <td className="py-3 px-2 text-right text-slate-600">{(item.contractedValue / 1000).toFixed(1)}k</td>
-                    <td className="py-3 px-2 text-right text-slate-600">{(item.commissionedValue / 1000).toFixed(1)}k</td>
-                    <td className="py-3 px-2 text-right font-bold text-blue-700">R$ {item.totalValue.toLocaleString('pt-BR')}</td>
-                    <td className="py-3 px-2 text-right">
-                      <button onClick={() => removeEntry(item.id)} className="text-slate-300 hover:text-red-500 transition-colors">
-                        <Trash2 className="w-4 h-4" />
+                  <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="py-4 px-4 font-bold text-slate-800 text-base">{item.monthYear}</td>
+                    <td className="py-4 px-4 text-center font-black text-slate-700 text-base">{item.effectiveCount + item.contractedCount + item.commissionedCount}</td>
+                    <td className="py-4 px-4 text-right text-slate-600 font-bold">R$ {item.effectiveValue.toLocaleString('pt-BR')}</td>
+                    <td className="py-4 px-4 text-right text-slate-600 font-bold">R$ {item.contractedValue.toLocaleString('pt-BR')}</td>
+                    <td className="py-4 px-4 text-right text-slate-600 font-bold">R$ {item.commissionedValue.toLocaleString('pt-BR')}</td>
+                    <td className="py-4 px-4 text-right font-black text-blue-700 text-lg">R$ {item.totalValue.toLocaleString('pt-BR')}</td>
+                    <td className="py-4 px-4 text-right">
+                      <button onClick={() => removeEntry(item.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                        <Trash2 className="w-5 h-5" />
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
+              {data.length > 0 && (
+                <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                  <tr>
+                    <td className="py-5 px-4 font-black text-red-600 text-base uppercase tracking-widest">TOTAL</td>
+                    <td className="py-5 px-4 text-center font-black text-slate-900 text-lg underline decoration-red-500 decoration-2">{totals.totalCount}</td>
+                    <td className="py-5 px-4 text-right font-black text-slate-800 text-base">R$ {totals.effectiveValue.toLocaleString('pt-BR')}</td>
+                    <td className="py-5 px-4 text-right font-black text-slate-800 text-base">R$ {totals.contractedValue.toLocaleString('pt-BR')}</td>
+                    <td className="py-5 px-4 text-right font-black text-slate-800 text-base">R$ {totals.commissionedValue.toLocaleString('pt-BR')}</td>
+                    <td className="py-5 px-4 text-right font-black text-blue-800 text-xl">R$ {totals.totalValue.toLocaleString('pt-BR')}</td>
+                    <td className="py-5 px-4"></td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
