@@ -5,7 +5,7 @@ import AnalysisView from './components/AnalysisView';
 import UserManagement from './components/UserManagement';
 import CompanyForm from './components/CompanyForm';
 import Login from './components/Login';
-import { PayrollData, AppTab, AuthState, CompanyData } from './types';
+import { PayrollData, AppTab, AuthState, CompanyData, ResellerUser } from './types';
 import { analyzePayroll } from './services/geminiService';
 import { 
   BrainCircuit, 
@@ -19,7 +19,13 @@ import {
   LogOut,
   Building2,
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  CloudCog,
+  Copy,
+  Download,
+  Upload,
+  RefreshCcw,
+  Check
 } from 'lucide-react';
 
 // Chaves para o LocalStorage
@@ -28,7 +34,8 @@ const STORAGE_KEYS = {
   ACTIVE_ID: 'gestorpro_active_company_id',
   AUTH: 'gestorpro_auth_state',
   ANALYSIS: 'gestorpro_last_analysis',
-  TAB: 'gestorpro_active_tab'
+  TAB: 'gestorpro_active_tab',
+  USERS: 'gestorpro_users_data'
 };
 
 const App: React.FC = () => {
@@ -59,6 +66,9 @@ const App: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string>();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncCode, setSyncCode] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // Efeitos para salvar dados sempre que houver mudanças
   useEffect(() => {
@@ -99,7 +109,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (auth.user?.role === 'reseller' && auth.user.linkedCompanyId) {
       setActiveCompanyId(auth.user.linkedCompanyId);
-      // Se for o primeiro acesso do reseller, manda para lançamentos
       if (activeTab === 'empresa') setActiveTab('lancamento');
     }
   }, [auth.user]);
@@ -145,7 +154,6 @@ const App: React.FC = () => {
   const handleSelectCompany = (id: string) => {
     setActiveCompanyId(id);
     setActiveTab('lancamento');
-    // Só limpamos a análise se mudar de empresa
     if (id !== activeCompanyId) setAnalysis(''); 
   };
 
@@ -168,6 +176,32 @@ const App: React.FC = () => {
       setError(err.message || 'Ocorreu um erro inesperado.');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Funções de Sincronização
+  const generateExportCode = () => {
+    const data = {
+      companies: allCompanies,
+      users: JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]')
+    };
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+    setSyncCode(code);
+  };
+
+  const handleImportCode = (code: string) => {
+    try {
+      const decoded = JSON.parse(decodeURIComponent(escape(atob(code))));
+      if (decoded.companies) {
+        if (window.confirm('A importação irá substituir todos os dados deste dispositivo. Continuar?')) {
+          setAllCompanies(decoded.companies);
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(decoded.users || []));
+          alert('Dados importados com sucesso! O sistema será atualizado.');
+          window.location.reload();
+        }
+      }
+    } catch (e) {
+      alert('Código de sincronização inválido.');
     }
   };
 
@@ -268,13 +302,22 @@ const App: React.FC = () => {
             </button>
 
             {auth.user?.role === 'admin' && (
-              <button 
-                onClick={() => {setActiveTab('usuarios'); setIsMenuOpen(false);}}
-                className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${activeTab === 'usuarios' ? 'bg-blue-600 text-white font-black shadow-2xl shadow-blue-900/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-              >
-                <Users className="w-6 h-6" />
-                Gerenciar Revendas
-              </button>
+              <>
+                <button 
+                  onClick={() => {setActiveTab('usuarios'); setIsMenuOpen(false);}}
+                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${activeTab === 'usuarios' ? 'bg-blue-600 text-white font-black shadow-2xl shadow-blue-900/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                >
+                  <Users className="w-6 h-6" />
+                  Gerenciar Revendas
+                </button>
+                <button 
+                  onClick={() => {setShowSyncModal(true); setIsMenuOpen(false);}}
+                  className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all"
+                >
+                  <CloudCog className="w-6 h-6" />
+                  Backup & Sincronia
+                </button>
+              </>
             )}
           </nav>
 
@@ -384,24 +427,6 @@ const App: React.FC = () => {
         </header>
 
         <div className="max-w-7xl mx-auto">
-          {!activeCompanyId && activeTab !== 'empresa' && auth.user?.role === 'admin' && (
-            <div className="mb-10 bg-amber-50 border-l-8 border-amber-500 p-8 rounded-2xl flex items-center gap-6 shadow-sm">
-              <div className="bg-amber-500 p-3 rounded-xl text-white">
-                <AlertTriangle className="w-8 h-8" />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-xl font-black text-amber-900">Atenção Necessária</h4>
-                <p className="text-amber-800 font-medium">Você precisa selecionar ou cadastrar uma empresa antes de prosseguir.</p>
-              </div>
-              <button 
-                onClick={() => setActiveTab('empresa')}
-                className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-black transition-all"
-              >
-                IR PARA EMPRESAS
-              </button>
-            </div>
-          )}
-
           {activeTab === 'empresa' && auth.user?.role === 'admin' && (
             <CompanyForm 
               companies={visibleCompanies}
@@ -431,6 +456,81 @@ const App: React.FC = () => {
           )}
         </div>
       </main>
+
+      {/* Sync Modal */}
+      {showSyncModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-8 bg-blue-600 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-black tracking-tight">Multi-Acesso & Sincronia</h3>
+                <p className="text-blue-100 text-sm mt-1">Leve seus dados do PC para o Celular ou vice-versa.</p>
+              </div>
+              <button onClick={() => setShowSyncModal(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-blue-600 mb-2">
+                  <Download className="w-5 h-5" />
+                  <h4 className="font-black uppercase text-xs tracking-widest">Exportar do Dispositivo</h4>
+                </div>
+                <p className="text-slate-500 text-xs font-medium">Gere um código seguro com todas as suas empresas e usuários para usar em outro navegador.</p>
+                <button 
+                  onClick={generateExportCode}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <RefreshCcw className="w-4 h-4" /> Gerar Novo Código
+                </button>
+                {syncCode && (
+                  <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl relative group">
+                    <p className="text-[10px] text-slate-400 font-black mb-2 uppercase">Código de Sincronia</p>
+                    <div className="max-h-24 overflow-y-auto break-all text-[10px] font-mono text-slate-600 pr-8">
+                      {syncCode}
+                    </div>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(syncCode);
+                        setCopySuccess(true);
+                        setTimeout(() => setCopySuccess(false), 2000);
+                      }}
+                      className="absolute top-4 right-4 p-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:text-blue-600 transition-all"
+                    >
+                      {copySuccess ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4 border-t md:border-t-0 md:border-l border-slate-100 pt-8 md:pt-0 md:pl-8">
+                <div className="flex items-center gap-2 text-emerald-600 mb-2">
+                  <Upload className="w-5 h-5" />
+                  <h4 className="font-black uppercase text-xs tracking-widest">Importar para este Dispositivo</h4>
+                </div>
+                <p className="text-slate-500 text-xs font-medium">Cole o código gerado no seu outro dispositivo para sincronizar as informações agora.</p>
+                <textarea 
+                  placeholder="Cole o código aqui..."
+                  className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-[10px] font-mono transition-all"
+                  onChange={(e) => handleImportCode(e.target.value)}
+                />
+                <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <p className="text-[10px] text-amber-700 font-bold leading-tight">Aviso: A importação substituirá permanentemente os dados locais deste navegador.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 bg-slate-50 border-t border-slate-100 flex items-center gap-4">
+              <div className="bg-blue-100 p-2 rounded-lg">
+                <Info className="w-4 h-4 text-blue-600" />
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium">Como o GestorPro é Local-First, você deve repetir este processo sempre que desejar atualizar o espelhamento de dados entre dispositivos.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
