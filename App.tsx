@@ -26,7 +26,9 @@ import {
 const STORAGE_KEYS = {
   COMPANIES: 'gestorpro_companies_data',
   ACTIVE_ID: 'gestorpro_active_company_id',
-  AUTH: 'gestorpro_auth_state'
+  AUTH: 'gestorpro_auth_state',
+  ANALYSIS: 'gestorpro_last_analysis',
+  TAB: 'gestorpro_active_tab'
 };
 
 const App: React.FC = () => {
@@ -45,23 +47,20 @@ const App: React.FC = () => {
     return localStorage.getItem(STORAGE_KEYS.ACTIVE_ID);
   });
 
-  const [activeTab, setActiveTab] = useState<AppTab>('empresa');
-  const [analysis, setAnalysis] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<AppTab>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.TAB);
+    return (saved as AppTab) || 'empresa';
+  });
+
+  const [analysis, setAnalysis] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEYS.ANALYSIS) || '';
+  });
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string>();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Filtrar empresas visíveis com base no papel do usuário
-  const visibleCompanies = useMemo(() => {
-    if (!auth.user) return [];
-    if (auth.user.role === 'admin') return allCompanies;
-    if (auth.user.role === 'reseller' && auth.user.linkedCompanyId) {
-      return allCompanies.filter(c => c.id === auth.user?.linkedCompanyId);
-    }
-    return [];
-  }, [allCompanies, auth.user]);
-
-  // Efeito para salvar dados sempre que houver mudanças
+  // Efeitos para salvar dados sempre que houver mudanças
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.COMPANIES, JSON.stringify(allCompanies));
   }, [allCompanies]);
@@ -78,13 +77,32 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(auth));
   }, [auth]);
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TAB, activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.ANALYSIS, analysis);
+  }, [analysis]);
+
+  // Filtrar empresas visíveis com base no papel do usuário
+  const visibleCompanies = useMemo(() => {
+    if (!auth.user) return [];
+    if (auth.user.role === 'admin') return allCompanies;
+    if (auth.user.role === 'reseller' && auth.user.linkedCompanyId) {
+      return allCompanies.filter(c => c.id === auth.user?.linkedCompanyId);
+    }
+    return [];
+  }, [allCompanies, auth.user]);
+
   // Forçar seleção de empresa se for reseller e houver vínculo
   useEffect(() => {
     if (auth.user?.role === 'reseller' && auth.user.linkedCompanyId) {
       setActiveCompanyId(auth.user.linkedCompanyId);
+      // Se for o primeiro acesso do reseller, manda para lançamentos
       if (activeTab === 'empresa') setActiveTab('lancamento');
     }
-  }, [auth.user, activeTab]);
+  }, [auth.user]);
 
   // Helper para obter a empresa ativa
   const activeCompany = useMemo(() => 
@@ -101,7 +119,11 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setAuth({ isAuthenticated: false, user: null });
     setActiveCompanyId(null);
+    setAnalysis('');
+    setActiveTab('empresa');
     localStorage.removeItem(STORAGE_KEYS.ACTIVE_ID);
+    localStorage.removeItem(STORAGE_KEYS.ANALYSIS);
+    localStorage.removeItem(STORAGE_KEYS.TAB);
   };
 
   const handleAddCompany = (data: CompanyData) => {
@@ -123,7 +145,8 @@ const App: React.FC = () => {
   const handleSelectCompany = (id: string) => {
     setActiveCompanyId(id);
     setActiveTab('lancamento');
-    setAnalysis(''); 
+    // Só limpamos a análise se mudar de empresa
+    if (id !== activeCompanyId) setAnalysis(''); 
   };
 
   const handleUpdatePayroll = (entries: PayrollData[]) => {
