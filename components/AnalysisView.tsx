@@ -1,22 +1,26 @@
 
-import React, { useState, useEffect } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import { PayrollData } from '../types';
-import { FileText, TrendingUp, AlertCircle, Loader2, ArrowRightLeft, BrainCircuit, Users, DollarSign } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, LabelList } from 'recharts';
+import { PayrollData, CompanyData } from '../types';
+import { FileText, TrendingUp, AlertCircle, Loader2, ArrowRightLeft, BrainCircuit, Users, DollarSign, Image as ImageIcon, FileDown, Building2 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface AnalysisViewProps {
   data: PayrollData[];
   analysis: string;
   isGenerating: boolean;
   error?: string;
+  activeCompany?: CompanyData | null;
 }
 
-// Cores mais saturadas e vibrantes para melhor visualização
 const COLORS = ['#2563eb', '#059669', '#d97706']; 
 
-const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGenerating, error }) => {
+const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGenerating, error, activeCompany }) => {
+  const dashboardRef = useRef<HTMLDivElement>(null);
   const [monthAId, setMonthAId] = useState<string>('');
   const [monthBId, setMonthBId] = useState<string>('');
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (data.length >= 2) {
@@ -26,6 +30,43 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
       setMonthBId(data[0].id);
     }
   }, [data]);
+
+  const exportAsImage = async () => {
+    if (!dashboardRef.current) return;
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(dashboardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const image = canvas.toDataURL('image/jpeg', 0.9);
+      const link = document.createElement('a');
+      link.href = image;
+      link.download = `dashboard_gestorpro_${activeCompany?.name || 'empresa'}_${new Date().getTime()}.jpg`;
+      link.click();
+    } catch (err) {
+      console.error("Erro ao exportar imagem:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportAsPDF = async () => {
+    if (!dashboardRef.current) return;
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(dashboardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`dashboard_gestorpro_${activeCompany?.name || 'empresa'}_${new Date().getTime()}.pdf`);
+    } catch (err) {
+      console.error("Erro ao exportar PDF:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (isGenerating) {
     return (
@@ -63,10 +104,13 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
     return ((valB - valA) / valA) * 100;
   };
 
+  const labelA = monthA?.monthYear || 'A';
+  const labelB = monthB?.monthYear || 'B';
+
   const compData = [
-    { name: 'Efetivos', [monthA?.monthYear || 'A']: monthA?.effectiveValue || 0, [monthB?.monthYear || 'B']: monthB?.effectiveValue || 0 },
-    { name: 'Contratados', [monthA?.monthYear || 'A']: monthA?.contractedValue || 0, [monthB?.monthYear || 'B']: monthB?.contractedValue || 0 },
-    { name: 'Comissionados', [monthA?.monthYear || 'A']: monthA?.commissionedValue || 0, [monthB?.monthYear || 'B']: monthB?.commissionedValue || 0 },
+    { name: 'Efetivos', [labelA]: monthA?.effectiveValue || 0, [labelB]: monthB?.effectiveValue || 0 },
+    { name: 'Contratados', [labelA]: monthA?.contractedValue || 0, [labelB]: monthB?.contractedValue || 0 },
+    { name: 'Comissionados', [labelA]: monthA?.commissionedValue || 0, [labelB]: monthB?.commissionedValue || 0 },
   ];
 
   const pieData = monthB ? [
@@ -82,35 +126,89 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
   const totalVarPercent = getDiff(totalValA, totalValB);
   const totalVarValue = totalValB - totalValA;
 
+  const formatCurrencyLabel = (value: number) => {
+    return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
   return (
-    <div className="space-y-8">
-      {/* Controles de Comparação */}
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-6 justify-between">
-        <div className="flex items-center gap-4">
-          <ArrowRightLeft className="w-6 h-6 text-blue-700" />
-          <h3 className="text-xl font-black text-slate-900">Comparação Dinâmica</h3>
-        </div>
-        <div className="flex items-center gap-4">
-          <select 
-            value={monthAId} 
-            onChange={(e) => setMonthAId(e.target.value)}
-            className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer shadow-sm"
-          >
-            <option value="">Selecione...</option>
-            {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
-          </select>
-          <span className="text-slate-400 font-black text-xl">vs</span>
-          <select 
-            value={monthBId} 
-            onChange={(e) => setMonthBId(e.target.value)}
-            className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer shadow-sm"
-          >
-            {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
-          </select>
+    <div className="space-y-8" ref={dashboardRef}>
+      {/* Header para Exportação */}
+      <div className="hidden block-on-export border-b-2 border-slate-900 pb-6 mb-10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <div className="w-20 h-20 rounded-2xl flex items-center justify-center overflow-hidden bg-white border border-slate-100">
+              {activeCompany?.logo ? (
+                <img src={activeCompany.logo} alt="Logo" className="w-full h-full object-contain p-2" />
+              ) : (
+                <Building2 className="w-10 h-10 text-blue-600" />
+              )}
+            </div>
+            <div>
+              <h1 className="text-3xl font-black text-slate-900 leading-tight uppercase tracking-tight">{activeCompany?.name}</h1>
+              <p className="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">CNPJ: {activeCompany?.cnpj}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Dashboard Estratégico</p>
+            <p className="text-xl font-black text-slate-900 mt-1">{new Date().toLocaleDateString('pt-BR')}</p>
+          </div>
         </div>
       </div>
 
-      {/* KPIs Comparativos - Maiores e mais vibrantes */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .block-on-export { display: none; }
+        @media screen { .block-on-export { display: none !important; } }
+      ` }} />
+
+      {/* Controles de Comparação e Exportação */}
+      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-6 justify-between no-print">
+        <div className="flex items-center gap-4">
+          <ArrowRightLeft className="w-6 h-6 text-blue-700" />
+          <h3 className="text-xl font-black text-slate-900">Estratégia & BI</h3>
+        </div>
+        
+        <div className="flex items-center gap-4 flex-wrap justify-center">
+          <div className="flex items-center gap-2 no-print">
+            <select 
+              value={monthAId} 
+              onChange={(e) => setMonthAId(e.target.value)}
+              className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer shadow-sm"
+            >
+              <option value="">Selecione...</option>
+              {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
+            </select>
+            <span className="text-slate-400 font-black text-xl">vs</span>
+            <select 
+              value={monthBId} 
+              onChange={(e) => setMonthBId(e.target.value)}
+              className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer shadow-sm"
+            >
+              {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
+            </select>
+          </div>
+
+          <div className="flex gap-2 no-print border-l border-slate-100 pl-4 ml-2">
+            <button 
+              onClick={exportAsImage}
+              disabled={isExporting}
+              title="Exportar como JPEG"
+              className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 p-3 rounded-xl transition-all shadow-sm"
+            >
+              <ImageIcon className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={exportAsPDF}
+              disabled={isExporting}
+              title="Exportar como PDF"
+              className="bg-slate-800 border border-slate-800 hover:bg-slate-900 text-white p-3 rounded-xl transition-all shadow-sm"
+            >
+              <FileDown className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* KPIs Comparativos */}
       {monthA && monthB && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-md border-l-8 border-l-blue-600 transition-transform hover:scale-[1.02]">
@@ -148,24 +246,38 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
         </div>
       )}
 
-      {/* Gráficos em Linha */}
+      {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
           <h3 className="text-base font-black text-slate-800 uppercase mb-8 tracking-widest border-b border-slate-100 pb-4">Investimento por Vínculo (Comparativo)</h3>
-          <div className="h-80">
+          <div className="h-96">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={compData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={compData} margin={{ top: 40, right: 10, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis dataKey="name" stroke="#64748b" fontSize={13} fontWeight="700" tickLine={false} axisLine={false} />
-                <YAxis stroke="#64748b" fontSize={12} fontWeight="700" tickLine={false} axisLine={false} tickFormatter={(val) => `R$${(val/1000).toFixed(0)}k`} />
+                <YAxis hide stroke="#64748b" fontSize={12} fontWeight="700" tickLine={false} axisLine={false} />
                 <Tooltip 
                   cursor={{fill: '#f8fafc'}}
                   formatter={(val: number) => `R$ ${val.toLocaleString('pt-BR')}`}
                   contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
                 />
                 <Legend iconType="circle" iconSize={12} wrapperStyle={{ fontSize: '13px', fontWeight: '800', paddingTop: '20px' }} />
-                <Bar dataKey={monthA?.monthYear || 'A'} fill="#94a3b8" radius={[6, 6, 0, 0]} />
-                <Bar dataKey={monthB?.monthYear || 'B'} fill="#2563eb" radius={[6, 6, 0, 0]} />
+                <Bar dataKey={labelA} fill="#94a3b8" radius={[6, 6, 0, 0]}>
+                  <LabelList 
+                    dataKey={labelA} 
+                    position="top" 
+                    formatter={formatCurrencyLabel}
+                    style={{ fontSize: '10px', fontWeight: '900', fill: '#64748b' }}
+                  />
+                </Bar>
+                <Bar dataKey={labelB} fill="#2563eb" radius={[6, 6, 0, 0]}>
+                  <LabelList 
+                    dataKey={labelB} 
+                    position="top" 
+                    formatter={formatCurrencyLabel}
+                    style={{ fontSize: '10px', fontWeight: '900', fill: '#1e40af' }}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -173,7 +285,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
 
         <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
           <h3 className="text-base font-black text-slate-800 uppercase mb-8 tracking-widest text-center border-b border-slate-100 pb-4">Distribuição Financeira ({monthB?.monthYear})</h3>
-          <div className="h-80 flex items-center justify-center">
+          <div className="h-96 flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -202,7 +314,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
         </div>
       </div>
 
-      {/* Tabela com Fontes Maiores */}
+      {/* Tabela de Detalhamento */}
       {monthA && monthB && (
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden border-t-4 border-t-slate-800">
           <div className="px-8 py-5 bg-slate-900 text-white">
@@ -261,7 +373,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
         </div>
       )}
 
-      {/* Análise de IA com Fontes Maiores */}
+      {/* Análise de IA */}
       {analysis && (
         <div className="bg-white p-12 rounded-3xl shadow-xl border border-slate-200 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-[0.04] pointer-events-none">

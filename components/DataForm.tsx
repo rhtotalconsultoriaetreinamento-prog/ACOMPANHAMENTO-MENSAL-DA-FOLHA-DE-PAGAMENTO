@@ -1,17 +1,22 @@
 
-import React, { useState, useEffect } from 'react';
-import { PayrollData } from '../types';
-import { Plus, Trash2, Calendar, Users, DollarSign, Calculator, Briefcase, Edit3, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { PayrollData, CompanyData } from '../types';
+import { Plus, Trash2, Calendar, Users, DollarSign, Calculator, Briefcase, Edit3, CheckCircle, FileDown, Image as ImageIcon, FileText, Building2 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface DataFormProps {
   onDataChange: (data: PayrollData[]) => void;
   data: PayrollData[];
+  activeCompany?: CompanyData | null;
 }
 
-const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
+const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }) => {
+  const tableRef = useRef<HTMLDivElement>(null);
   const [selectedMonth, setSelectedMonth] = useState('Janeiro');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const [newEntry, setNewEntry] = useState<Omit<PayrollData, 'id'>>({
     monthYear: '',
@@ -31,13 +36,11 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
 
   const years = Array.from({ length: 2040 - 2000 + 1 }, (_, i) => (2000 + i).toString());
 
-  // Auto-calculate totalValue whenever individual values change
   useEffect(() => {
     const total = newEntry.effectiveValue + newEntry.contractedValue + newEntry.commissionedValue;
     setNewEntry(prev => ({ ...prev, totalValue: total }));
   }, [newEntry.effectiveValue, newEntry.contractedValue, newEntry.commissionedValue]);
 
-  // Update monthYear string based on selections
   useEffect(() => {
     const label = selectedMonth === '13º Salário' ? '13º' : selectedMonth;
     setNewEntry(prev => ({ ...prev, monthYear: `${label}/${selectedYear}` }));
@@ -45,20 +48,16 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
 
   const handleAddOrUpdate = () => {
     if (newEntry.totalValue <= 0) return;
-    
     if (editingId) {
-      // Atualizar existente
       onDataChange(data.map(d => d.id === editingId ? { ...newEntry, id: editingId } : d));
       setEditingId(null);
     } else {
-      // Adicionar novo
       const entry: PayrollData = {
         ...newEntry,
         id: Math.random().toString(36).substr(2, 9),
       };
       onDataChange([...data, entry]);
     }
-
     setNewEntry({
       ...newEntry,
       totalValue: 0,
@@ -86,20 +85,52 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
       commissionedCount: item.commissionedCount,
       commissionedValue: item.commissionedValue,
     });
-    // Scroll para o topo para facilitar a edição
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const removeEntry = (id: string) => {
     if (window.confirm('Deseja excluir este lançamento?')) {
       onDataChange(data.filter(d => d.id !== id));
-      if (editingId === id) {
-        setEditingId(null);
-      }
+      if (editingId === id) setEditingId(null);
     }
   };
 
-  // Cálculo dos Totais Gerais para o rodapé da tabela
+  const exportAsImage = async () => {
+    if (!tableRef.current) return;
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(tableRef.current, { scale: 2, backgroundColor: '#ffffff' });
+      const image = canvas.toDataURL('image/jpeg', 0.9);
+      const link = document.createElement('a');
+      link.href = image;
+      link.download = `lancamentos_folha_${activeCompany?.name || 'empresa'}_${new Date().getTime()}.jpg`;
+      link.click();
+    } catch (err) {
+      console.error("Erro ao exportar imagem:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportAsPDF = async () => {
+    if (!tableRef.current) return;
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(tableRef.current, { scale: 2, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('l', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`lancamentos_folha_${activeCompany?.name || 'empresa'}_${new Date().getTime()}.pdf`);
+    } catch (err) {
+      console.error("Erro ao exportar PDF:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const totals = data.reduce((acc, curr) => ({
     effectiveValue: acc.effectiveValue + curr.effectiveValue,
     contractedValue: acc.contractedValue + curr.contractedValue,
@@ -127,7 +158,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
       </div>
 
       <div className="p-8 space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 no-print">
           <div className="md:col-span-2 grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-black text-slate-500 uppercase mb-2 ml-1">Mês / Competência</label>
@@ -155,7 +186,6 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
             </div>
           </div>
 
-          {/* Efetivos */}
           <div className="p-5 bg-blue-50/80 rounded-2xl border border-blue-100 space-y-4 shadow-sm transition-all hover:shadow-md">
             <h4 className="text-sm font-black text-blue-800 uppercase flex items-center gap-2">
               <Users className="w-4 h-4" /> Efetivos (CLT)
@@ -184,7 +214,6 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
             </div>
           </div>
 
-          {/* Contratados */}
           <div className="p-5 bg-emerald-50/80 rounded-2xl border border-emerald-100 space-y-4 shadow-sm transition-all hover:shadow-md">
             <h4 className="text-sm font-black text-emerald-800 uppercase flex items-center gap-2">
               <Briefcase className="w-4 h-4" /> Contratados / PJ
@@ -213,7 +242,6 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
             </div>
           </div>
 
-          {/* Comissionados */}
           <div className="p-5 bg-amber-50/80 rounded-2xl border border-amber-100 space-y-4 shadow-sm transition-all hover:shadow-md">
             <h4 className="text-sm font-black text-amber-800 uppercase flex items-center gap-2">
               <DollarSign className="w-4 h-4" /> Comissionados
@@ -274,11 +302,61 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
           </div>
         </div>
 
-        <div className="mt-12">
-          <h3 className="text-sm font-black text-slate-400 uppercase mb-5 flex items-center gap-3 tracking-[0.2em]">
-            <Calendar className="w-5 h-5 text-blue-500" /> HISTÓRICO LANÇADO
-          </h3>
-          <div className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm">
+        <div className="mt-12" ref={tableRef}>
+          {/* Header para Exportação */}
+          <div className="hidden block-on-export border-b-2 border-slate-900 pb-6 mb-10">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div className="w-20 h-20 rounded-2xl flex items-center justify-center overflow-hidden bg-white border border-slate-100">
+                  {activeCompany?.logo ? (
+                    <img src={activeCompany.logo} alt="Logo" className="w-full h-full object-contain p-2" />
+                  ) : (
+                    <Building2 className="w-10 h-10 text-blue-600" />
+                  )}
+                </div>
+                <div>
+                  <h1 className="text-3xl font-black text-slate-900 leading-tight uppercase tracking-tight">{activeCompany?.name}</h1>
+                  <p className="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">CNPJ: {activeCompany?.cnpj}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Relatório Gerencial</p>
+                <p className="text-xl font-black text-slate-900 mt-1">{new Date().toLocaleDateString('pt-BR')}</p>
+              </div>
+            </div>
+          </div>
+
+          <style dangerouslySetInnerHTML={{ __html: `
+            .block-on-export { display: none; }
+            @media screen { .block-on-export { display: none !important; } }
+          ` }} />
+
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5">
+            <h3 className="text-sm font-black text-slate-400 uppercase flex items-center gap-3 tracking-[0.2em]">
+              <Calendar className="w-5 h-5 text-blue-500" /> HISTÓRICO LANÇADO
+            </h3>
+            
+            {data.length > 0 && (
+              <div className="flex gap-2 no-print">
+                <button 
+                  onClick={exportAsImage}
+                  disabled={isExporting}
+                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-sm"
+                >
+                  <ImageIcon className="w-4 h-4" /> JPEG
+                </button>
+                <button 
+                  onClick={exportAsPDF}
+                  disabled={isExporting}
+                  className="bg-slate-800 border border-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-sm"
+                >
+                  <FileText className="w-4 h-4" /> PDF
+                </button>
+              </div>
+            )}
+          </div>
+          
+          <div className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm bg-white">
             <table className="w-full text-left">
               <thead className="bg-slate-900 text-white border-b border-slate-800">
                 <tr>
@@ -288,7 +366,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
                   <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">CONT. (R$)</th>
                   <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">COMIS. (R$)</th>
                   <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">TOTAL</th>
-                  <th className="py-5 px-6 text-right"></th>
+                  <th className="py-5 px-6 text-right no-print"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -302,7 +380,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
                     <td className="py-4 px-6 text-right text-slate-600 font-bold">R$ {item.contractedValue.toLocaleString('pt-BR')}</td>
                     <td className="py-4 px-6 text-right text-slate-600 font-bold">R$ {item.commissionedValue.toLocaleString('pt-BR')}</td>
                     <td className="py-4 px-6 text-right font-black text-blue-700 text-lg">R$ {item.totalValue.toLocaleString('pt-BR')}</td>
-                    <td className="py-4 px-6 text-right whitespace-nowrap space-x-2">
+                    <td className="py-4 px-6 text-right whitespace-nowrap space-x-2 no-print">
                       <button 
                         onClick={() => handleEdit(item)} 
                         className="p-2 text-slate-400 hover:text-blue-600 transition-colors rounded-lg hover:bg-blue-50"
@@ -332,7 +410,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data }) => {
                     <td className="py-5 px-6 text-right font-black text-slate-800 text-base">R$ {totals.contractedValue.toLocaleString('pt-BR')}</td>
                     <td className="py-5 px-6 text-right font-black text-slate-800 text-base">R$ {totals.commissionedValue.toLocaleString('pt-BR')}</td>
                     <td className="py-5 px-6 text-right font-black text-blue-800 text-xl">R$ {totals.totalValue.toLocaleString('pt-BR')}</td>
-                    <td className="py-5 px-6"></td>
+                    <td className="py-5 px-6 no-print"></td>
                   </tr>
                 </tfoot>
               )}

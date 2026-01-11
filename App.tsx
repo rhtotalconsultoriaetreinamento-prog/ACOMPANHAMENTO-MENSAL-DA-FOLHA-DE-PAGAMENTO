@@ -22,15 +22,51 @@ import {
   ChevronDown
 } from 'lucide-react';
 
+// Chaves para o LocalStorage
+const STORAGE_KEYS = {
+  COMPANIES: 'gestorpro_companies_data',
+  ACTIVE_ID: 'gestorpro_active_company_id',
+  AUTH: 'gestorpro_auth_state'
+};
+
 const App: React.FC = () => {
-  const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false, user: null });
+  // Inicialização do estado com dados do LocalStorage
+  const [auth, setAuth] = useState<AuthState>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.AUTH);
+    return saved ? JSON.parse(saved) : { isAuthenticated: false, user: null };
+  });
+
+  const [companies, setCompanies] = useState<CompanyData[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [activeCompanyId, setActiveCompanyId] = useState<string | null>(() => {
+    return localStorage.getItem(STORAGE_KEYS.ACTIVE_ID);
+  });
+
   const [activeTab, setActiveTab] = useState<AppTab>('empresa');
-  const [companies, setCompanies] = useState<CompanyData[]>([]);
-  const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string>();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Efeito para salvar dados sempre que houver mudanças
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.COMPANIES, JSON.stringify(companies));
+  }, [companies]);
+
+  useEffect(() => {
+    if (activeCompanyId) {
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, activeCompanyId);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_ID);
+    }
+  }, [activeCompanyId]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(auth));
+  }, [auth]);
 
   // Helper para obter a empresa ativa
   const activeCompany = useMemo(() => 
@@ -53,6 +89,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setAuth({ isAuthenticated: false, user: null });
+    // Opcional: não limpamos companies no logout para que fiquem salvas no dispositivo
   };
 
   const handleAddCompany = (data: CompanyData) => {
@@ -64,7 +101,10 @@ const App: React.FC = () => {
   const handleDeleteCompany = (id: string) => {
     if (window.confirm('Excluir esta empresa e todos os seus lançamentos?')) {
       setCompanies(prev => prev.filter(c => c.id !== id));
-      if (activeCompanyId === id) setActiveCompanyId(null);
+      if (activeCompanyId === id) {
+        setActiveCompanyId(null);
+        localStorage.removeItem(STORAGE_KEYS.ACTIVE_ID);
+      }
     }
   };
 
@@ -254,8 +294,12 @@ const App: React.FC = () => {
           {companies.length > 0 && (
             <div className="relative group">
               <div className="bg-blue-600 px-6 py-4 rounded-3xl shadow-xl shadow-blue-600/10 flex items-center gap-4 text-white hover:bg-blue-700 transition-colors cursor-pointer">
-                <div className="bg-white/20 p-2 rounded-xl">
-                  <Building2 className="w-6 h-6" />
+                <div className="bg-white p-2 rounded-xl w-12 h-12 flex items-center justify-center overflow-hidden shrink-0">
+                  {activeCompany?.logo ? (
+                    <img src={activeCompany.logo} alt="Logo" className="w-full h-full object-contain" />
+                  ) : (
+                    <Building2 className="w-6 h-6 text-blue-600" />
+                  )}
                 </div>
                 <div className="flex flex-col pr-8">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Empresa Ativa</p>
@@ -311,7 +355,7 @@ const App: React.FC = () => {
           )}
           
           {activeTab === 'lancamento' && activeCompany && (
-            <DataForm onDataChange={handleUpdatePayroll} data={activeCompany.payrollEntries} />
+            <DataForm onDataChange={handleUpdatePayroll} data={activeCompany.payrollEntries} activeCompany={activeCompany} />
           )}
           
           {activeTab === 'dashboard' && activeCompany && (
@@ -320,6 +364,7 @@ const App: React.FC = () => {
               analysis={analysis} 
               isGenerating={isGenerating} 
               error={error} 
+              activeCompany={activeCompany}
             />
           )}
           

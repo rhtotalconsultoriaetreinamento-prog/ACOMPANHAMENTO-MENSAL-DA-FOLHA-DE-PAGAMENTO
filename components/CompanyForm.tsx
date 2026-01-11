@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { CompanyData } from '../types';
-import { Building2, Plus, CheckCircle2, FileText, Trash2, ArrowRight } from 'lucide-react';
+import { Building2, Plus, CheckCircle2, FileText, Trash2, ArrowRight, Upload, X } from 'lucide-react';
 
 interface CompanyFormProps {
   companies: CompanyData[];
@@ -13,10 +13,23 @@ interface CompanyFormProps {
 
 const CompanyForm: React.FC<CompanyFormProps> = ({ companies, activeCompanyId, onSave, onSelect, onDelete }) => {
   const [isAdding, setIsAdding] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<Omit<CompanyData, 'id' | 'payrollEntries'>>({
     name: '',
-    cnpj: ''
+    cnpj: '',
+    logo: ''
   });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, logo: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,11 +37,12 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ companies, activeCompanyId, o
       id: Math.random().toString(36).substr(2, 9),
       name: formData.name,
       cnpj: formData.cnpj,
+      logo: formData.logo,
       payrollEntries: []
     };
     onSave(newCompany);
     setIsAdding(false);
-    setFormData({ name: '', cnpj: '' });
+    setFormData({ name: '', cnpj: '', logo: '' });
   };
 
   return (
@@ -63,32 +77,70 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ companies, activeCompanyId, o
 
           <form onSubmit={handleSubmit} className="p-10 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-xs font-black text-slate-500 uppercase tracking-widest ml-1">
-                  <Building2 className="w-4 h-4 text-blue-500" /> Nome da Empresa
-                </label>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                  placeholder="Ex: Minha Empresa LTDA"
-                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 outline-none transition-all text-lg"
-                />
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-xs font-black text-slate-500 uppercase tracking-widest ml-1">
+                    <Building2 className="w-4 h-4 text-blue-500" /> Nome da Empresa
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    value={formData.name}
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                    placeholder="Ex: Minha Empresa LTDA"
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 outline-none transition-all text-lg"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-xs font-black text-slate-500 uppercase tracking-widest ml-1">
+                    <FileText className="w-4 h-4 text-blue-500" /> CNPJ
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    value={formData.cnpj}
+                    onChange={e => setFormData({...formData, cnpj: e.target.value})}
+                    placeholder="00.000.000/0000-00"
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 outline-none transition-all text-lg"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-xs font-black text-slate-500 uppercase tracking-widest ml-1">
-                  <FileText className="w-4 h-4 text-blue-500" /> CNPJ
+                  <Upload className="w-4 h-4 text-blue-500" /> Logo da Empresa
                 </label>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.cnpj}
-                  onChange={e => setFormData({...formData, cnpj: e.target.value})}
-                  placeholder="00.000.000/0000-00"
-                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 outline-none transition-all text-lg"
-                />
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-[180px] bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden group relative"
+                >
+                  {formData.logo ? (
+                    <>
+                      <img src={formData.logo} alt="Preview Logo" className="w-full h-full object-contain p-4" />
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setFormData(prev => ({ ...prev, logo: '' })); }}
+                        className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-10 h-10 text-slate-300 mb-2 group-hover:text-blue-500 transition-colors" />
+                      <p className="text-slate-400 font-bold text-sm">Clique para upload</p>
+                      <p className="text-[10px] text-slate-300 font-black uppercase mt-1">PNG ou JPG (Sugerido 200x200)</p>
+                    </>
+                  )}
+                  <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    className="hidden" 
+                    accept="image/*"
+                    onChange={handleFileChange}
+                  />
+                </div>
               </div>
             </div>
 
@@ -121,8 +173,12 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ companies, activeCompanyId, o
             onClick={() => onSelect(company.id)}
           >
             <div className="flex justify-between items-start mb-6">
-              <div className={`p-3 rounded-2xl ${activeCompanyId === company.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                <Building2 className="w-6 h-6" />
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 ${activeCompanyId === company.id ? 'bg-blue-600 text-white border-blue-500' : 'bg-slate-50 text-slate-400'}`}>
+                {company.logo ? (
+                  <img src={company.logo} alt={company.name} className="w-full h-full object-contain p-2" />
+                ) : (
+                  <Building2 className="w-8 h-8" />
+                )}
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); onDelete(company.id); }}

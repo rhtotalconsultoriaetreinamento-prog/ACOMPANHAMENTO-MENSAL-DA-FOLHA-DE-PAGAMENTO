@@ -15,6 +15,7 @@ export interface CompanyData {
   id: string;
   name: string;
   cnpj: string;
+  logo?: string;
   payrollEntries: PayrollData[];
 }
 
