@@ -36,7 +36,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : { isAuthenticated: false, user: null };
   });
 
-  const [companies, setCompanies] = useState<CompanyData[]>(() => {
+  const [allCompanies, setAllCompanies] = useState<CompanyData[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
     return saved ? JSON.parse(saved) : [];
   });
@@ -51,10 +51,20 @@ const App: React.FC = () => {
   const [error, setError] = useState<string>();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  // Filtrar empresas visíveis com base no papel do usuário
+  const visibleCompanies = useMemo(() => {
+    if (!auth.user) return [];
+    if (auth.user.role === 'admin') return allCompanies;
+    if (auth.user.role === 'reseller' && auth.user.linkedCompanyId) {
+      return allCompanies.filter(c => c.id === auth.user?.linkedCompanyId);
+    }
+    return [];
+  }, [allCompanies, auth.user]);
+
   // Efeito para salvar dados sempre que houver mudanças
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.COMPANIES, JSON.stringify(companies));
-  }, [companies]);
+    localStorage.setItem(STORAGE_KEYS.COMPANIES, JSON.stringify(allCompanies));
+  }, [allCompanies]);
 
   useEffect(() => {
     if (activeCompanyId) {
@@ -68,39 +78,41 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(auth));
   }, [auth]);
 
+  // Forçar seleção de empresa se for reseller e houver vínculo
+  useEffect(() => {
+    if (auth.user?.role === 'reseller' && auth.user.linkedCompanyId) {
+      setActiveCompanyId(auth.user.linkedCompanyId);
+      if (activeTab === 'empresa') setActiveTab('lancamento');
+    }
+  }, [auth.user, activeTab]);
+
   // Helper para obter a empresa ativa
   const activeCompany = useMemo(() => 
-    companies.find(c => c.id === activeCompanyId) || null
-  , [companies, activeCompanyId]);
+    visibleCompanies.find(c => c.id === activeCompanyId) || null
+  , [visibleCompanies, activeCompanyId]);
 
-  // Se o usuário logar e não tiver empresa selecionada, mantém em 'empresa'
-  useEffect(() => {
-    if (auth.isAuthenticated && !activeCompanyId && companies.length === 0) {
-      setActiveTab('empresa');
-    }
-  }, [auth.isAuthenticated, activeCompanyId, companies.length]);
-
-  const handleLogin = (name: string, role: 'admin' | 'reseller') => {
+  const handleLogin = (name: string, role: 'admin' | 'reseller', linkedCompanyId?: string) => {
     setAuth({
       isAuthenticated: true,
-      user: { name, role }
+      user: { name, role, linkedCompanyId }
     });
   };
 
   const handleLogout = () => {
     setAuth({ isAuthenticated: false, user: null });
-    // Opcional: não limpamos companies no logout para que fiquem salvas no dispositivo
+    setActiveCompanyId(null);
+    localStorage.removeItem(STORAGE_KEYS.ACTIVE_ID);
   };
 
   const handleAddCompany = (data: CompanyData) => {
-    setCompanies(prev => [...prev, data]);
+    setAllCompanies(prev => [...prev, data]);
     setActiveCompanyId(data.id);
     setActiveTab('lancamento');
   };
 
   const handleDeleteCompany = (id: string) => {
     if (window.confirm('Excluir esta empresa e todos os seus lançamentos?')) {
-      setCompanies(prev => prev.filter(c => c.id !== id));
+      setAllCompanies(prev => prev.filter(c => c.id !== id));
       if (activeCompanyId === id) {
         setActiveCompanyId(null);
         localStorage.removeItem(STORAGE_KEYS.ACTIVE_ID);
@@ -111,12 +123,12 @@ const App: React.FC = () => {
   const handleSelectCompany = (id: string) => {
     setActiveCompanyId(id);
     setActiveTab('lancamento');
-    setAnalysis(''); // Limpa análise ao trocar de contexto
+    setAnalysis(''); 
   };
 
   const handleUpdatePayroll = (entries: PayrollData[]) => {
     if (!activeCompanyId) return;
-    setCompanies(prev => prev.map(c => 
+    setAllCompanies(prev => prev.map(c => 
       c.id === activeCompanyId ? { ...c, payrollEntries: entries } : c
     ));
   };
@@ -147,7 +159,7 @@ const App: React.FC = () => {
         { id: '3', monthYear: 'Dezembro/2024', totalValue: 165000, effectiveCount: 35, effectiveValue: 105000, contractedCount: 3, contractedValue: 12000, commissionedCount: 20, commissionedValue: 48000 },
       ]
     };
-    setCompanies(prev => {
+    setAllCompanies(prev => {
       if (prev.some(c => c.id === 'example-1')) return prev;
       return [...prev, exampleCompany];
     });
@@ -190,19 +202,22 @@ const App: React.FC = () => {
           </div>
 
           <nav className="flex-1 p-5 space-y-3 mt-4">
-            <button 
-              onClick={() => {setActiveTab('empresa'); setIsMenuOpen(false);}}
-              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${activeTab === 'empresa' ? 'bg-blue-600 text-white font-black shadow-2xl shadow-blue-900/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-            >
-              <Building2 className="w-6 h-6" />
-              Empresas
-              {companies.length === 0 && <span className="w-2 h-2 bg-red-500 rounded-full ml-auto animate-pulse" />}
-            </button>
+            {auth.user?.role === 'admin' && (
+              <button 
+                onClick={() => {setActiveTab('empresa'); setIsMenuOpen(false);}}
+                className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${activeTab === 'empresa' ? 'bg-blue-600 text-white font-black shadow-2xl shadow-blue-900/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+              >
+                <Building2 className="w-6 h-6" />
+                Empresas
+                {visibleCompanies.length === 0 && <span className="w-2 h-2 bg-red-500 rounded-full ml-auto animate-pulse" />}
+              </button>
+            )}
+            
             <button 
               onClick={() => {
                 if (!activeCompanyId) {
                   alert('Por favor, selecione ou cadastre uma empresa primeiro.');
-                  setActiveTab('empresa');
+                  if (auth.user?.role === 'admin') setActiveTab('empresa');
                 } else {
                   setActiveTab('lancamento');
                 }
@@ -217,7 +232,7 @@ const App: React.FC = () => {
               onClick={() => {
                 if (!activeCompanyId) {
                   alert('Por favor, selecione ou cadastre uma empresa primeiro.');
-                  setActiveTab('empresa');
+                  if (auth.user?.role === 'admin') setActiveTab('empresa');
                 } else {
                   setActiveTab('dashboard');
                 }
@@ -244,6 +259,7 @@ const App: React.FC = () => {
             <div className="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/50">
               <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-2">Logado como</p>
               <p className="text-sm font-black text-slate-200 truncate">{auth.user?.name}</p>
+              <p className="text-[10px] font-bold text-blue-500 mt-1 uppercase">{auth.user?.role === 'admin' ? 'Acesso Total' : 'Acesso Restrito'}</p>
               <button 
                 onClick={handleLogout}
                 className="mt-4 w-full flex items-center justify-center gap-2 text-xs text-red-400 hover:text-white hover:bg-red-500 transition-all font-black py-3 bg-red-500/10 rounded-xl"
@@ -261,12 +277,14 @@ const App: React.FC = () => {
               <ChevronRight className="w-5 h-5" />
             </button>
             
-            <button 
-              onClick={loadExample}
-              className="w-full text-[10px] text-slate-600 hover:text-blue-400 font-black uppercase tracking-widest transition-colors"
-            >
-              Carregar Dados Exemplo
-            </button>
+            {auth.user?.role === 'admin' && (
+              <button 
+                onClick={loadExample}
+                className="w-full text-[10px] text-slate-600 hover:text-blue-400 font-black uppercase tracking-widest transition-colors"
+              >
+                Carregar Dados Exemplo
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -291,7 +309,7 @@ const App: React.FC = () => {
             </div>
           </div>
           
-          {companies.length > 0 && (
+          {visibleCompanies.length > 1 && (
             <div className="relative group">
               <div className="bg-blue-600 px-6 py-4 rounded-3xl shadow-xl shadow-blue-600/10 flex items-center gap-4 text-white hover:bg-blue-700 transition-colors cursor-pointer">
                 <div className="bg-white p-2 rounded-xl w-12 h-12 flex items-center justify-center overflow-hidden shrink-0">
@@ -309,24 +327,41 @@ const App: React.FC = () => {
                 </div>
                 <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 w-5 h-5 opacity-50" />
                 
-                {/* Custom Styled Native Select for seamless integration */}
                 <select 
                   value={activeCompanyId || ''}
                   onChange={(e) => handleSelectCompany(e.target.value)}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-slate-900"
                 >
                   <option value="" disabled className="text-slate-900">Escolha uma empresa...</option>
-                  {companies.map(c => (
+                  {visibleCompanies.map(c => (
                     <option key={c.id} value={c.id} className="text-slate-900">{c.name}</option>
                   ))}
                 </select>
               </div>
             </div>
           )}
+
+          {visibleCompanies.length === 1 && (
+            <div className="bg-white px-6 py-4 rounded-3xl border border-slate-200 flex items-center gap-4 text-slate-800 shadow-sm">
+               <div className="bg-slate-50 p-2 rounded-xl w-12 h-12 flex items-center justify-center overflow-hidden shrink-0 border border-slate-100">
+                  {activeCompany?.logo ? (
+                    <img src={activeCompany.logo} alt="Logo" className="w-full h-full object-contain" />
+                  ) : (
+                    <Building2 className="w-6 h-6 text-blue-600" />
+                  )}
+                </div>
+                <div className="flex flex-col">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Ambiente de Trabalho</p>
+                  <p className="font-black text-lg leading-tight truncate">
+                    {activeCompany?.name}
+                  </p>
+                </div>
+            </div>
+          )}
         </header>
 
         <div className="max-w-7xl mx-auto">
-          {!activeCompanyId && activeTab !== 'empresa' && (
+          {!activeCompanyId && activeTab !== 'empresa' && auth.user?.role === 'admin' && (
             <div className="mb-10 bg-amber-50 border-l-8 border-amber-500 p-8 rounded-2xl flex items-center gap-6 shadow-sm">
               <div className="bg-amber-500 p-3 rounded-xl text-white">
                 <AlertTriangle className="w-8 h-8" />
@@ -344,9 +379,9 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'empresa' && (
+          {activeTab === 'empresa' && auth.user?.role === 'admin' && (
             <CompanyForm 
-              companies={companies}
+              companies={visibleCompanies}
               activeCompanyId={activeCompanyId}
               onSave={handleAddCompany}
               onSelect={handleSelectCompany}
@@ -368,7 +403,9 @@ const App: React.FC = () => {
             />
           )}
           
-          {activeTab === 'usuarios' && <UserManagement />}
+          {activeTab === 'usuarios' && auth.user?.role === 'admin' && (
+            <UserManagement companies={allCompanies} />
+          )}
         </div>
       </main>
     </div>

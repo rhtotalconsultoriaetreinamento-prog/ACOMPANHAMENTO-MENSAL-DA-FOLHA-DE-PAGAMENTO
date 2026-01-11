@@ -1,26 +1,40 @@
 
-import React, { useState } from 'react';
-import { ResellerUser } from '../types';
-import { Users, UserPlus, Trash2, Edit3, ShieldCheck, ShieldAlert, Search, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ResellerUser, CompanyData } from '../types';
+import { Users, UserPlus, Trash2, Edit3, ShieldCheck, ShieldAlert, Search, X, Building, Lock, Eye, EyeOff } from 'lucide-react';
 
-const UserManagement: React.FC = () => {
-  const [users, setUsers] = useState<ResellerUser[]>([
-    { id: '1', name: 'João Silva', email: 'joao@cliente.com', company: 'Tech RH Solutions', status: 'Ativo', expirationDate: '2025-12-31' },
-    { id: '2', name: 'Maria Santos', email: 'maria@gestao.com', company: 'Hospitais Associados', status: 'Ativo', expirationDate: '2024-11-20' },
-    { id: '3', name: 'Ricardo Melo', email: 'ricardo@comercial.com', company: 'Vendas Diretas Ltda', status: 'Inativo', expirationDate: '2023-05-15' },
-  ]);
+interface UserManagementProps {
+  companies: CompanyData[];
+}
+
+const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
+  const [users, setUsers] = useState<ResellerUser[]>(() => {
+    const saved = localStorage.getItem('gestorpro_users_data');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('gestorpro_users_data', JSON.stringify(users));
+  }, [users]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   
   const [formData, setFormData] = useState<Omit<ResellerUser, 'id'>>({
     name: '',
     email: '',
     company: '',
+    password: '',
+    linkedCompanyId: '',
     status: 'Ativo',
     expirationDate: '',
   });
+
+  const validatePassword = (pass: string) => {
+    return pass.length >= 6 && /[a-zA-Z]/.test(pass);
+  };
 
   const filteredUsers = users.filter(u => 
     u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -33,6 +47,8 @@ const UserManagement: React.FC = () => {
       name: '',
       email: '',
       company: '',
+      password: '',
+      linkedCompanyId: '',
       status: 'Ativo',
       expirationDate: '',
     });
@@ -45,6 +61,8 @@ const UserManagement: React.FC = () => {
       name: user.name,
       email: user.email,
       company: user.company,
+      password: user.password || '',
+      linkedCompanyId: user.linkedCompanyId || '',
       status: user.status,
       expirationDate: user.expirationDate,
     });
@@ -52,18 +70,28 @@ const UserManagement: React.FC = () => {
   };
 
   const handleSave = () => {
-    if (!formData.name || !formData.email || !formData.company) {
+    if (!formData.name || !formData.email || !formData.linkedCompanyId || (!editingUserId && !formData.password)) {
       alert('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
 
+    if (!editingUserId && !validatePassword(formData.password || '')) {
+      alert('A senha deve ter no mínimo 6 dígitos e pelo menos uma letra.');
+      return;
+    }
+
+    const selectedCompany = companies.find(c => c.id === formData.linkedCompanyId);
+    const updatedFormData = { 
+      ...formData, 
+      company: selectedCompany?.name || formData.company,
+      mustChangePassword: !editingUserId // Somente novos usuários precisam trocar
+    };
+
     if (editingUserId) {
-      // Atualizar usuário existente
-      setUsers(users.map(u => u.id === editingUserId ? { ...formData, id: editingUserId } : u));
+      setUsers(users.map(u => u.id === editingUserId ? { ...updatedFormData, id: editingUserId } : u));
     } else {
-      // Adicionar novo usuário
       const newUser: ResellerUser = {
-        ...formData,
+        ...updatedFormData,
         id: Math.random().toString(36).substr(2, 9),
       };
       setUsers([...users, newUser]);
@@ -122,7 +150,9 @@ const UserManagement: React.FC = () => {
                         </div>
                         <div className="min-w-0">
                           <p className="font-bold text-slate-800 truncate">{user.name}</p>
-                          <p className="text-xs text-slate-400 truncate">{user.company}</p>
+                          <p className="text-xs text-slate-400 truncate flex items-center gap-1">
+                            <Building className="w-3 h-3" /> {user.company}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -181,7 +211,7 @@ const UserManagement: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Responsável *</label>
                 <input 
@@ -192,16 +222,7 @@ const UserManagement: React.FC = () => {
                   placeholder="Ex: Pedro Alvares"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa / Unidade *</label>
-                <input 
-                  type="text" 
-                  value={formData.company}
-                  onChange={e => setFormData({...formData, company: e.target.value})}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ex: Filial Sul"
-                />
-              </div>
+              
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">E-mail de Acesso *</label>
                 <input 
@@ -212,6 +233,47 @@ const UserManagement: React.FC = () => {
                   placeholder="cliente@email.com"
                 />
               </div>
+
+              {!editingUserId && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Senha Inicial *</label>
+                  <div className="relative">
+                    <input 
+                      type={showPassword ? "text" : "password"}
+                      value={formData.password}
+                      onChange={e => setFormData({...formData, password: e.target.value})}
+                      className={`w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 ${formData.password && !validatePassword(formData.password) ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                      placeholder="Mín. 6 dígitos + 1 letra"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {formData.password && !validatePassword(formData.password) && (
+                    <p className="text-[10px] text-red-500 mt-1 font-bold">A senha deve ter no mínimo 6 dígitos e pelo menos uma letra.</p>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa Vinculada *</label>
+                <select 
+                  value={formData.linkedCompanyId}
+                  onChange={e => setFormData({...formData, linkedCompanyId: e.target.value})}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">Selecione uma empresa...</option>
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1 italic">O usuário terá acesso restrito apenas a esta empresa.</p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status</label>

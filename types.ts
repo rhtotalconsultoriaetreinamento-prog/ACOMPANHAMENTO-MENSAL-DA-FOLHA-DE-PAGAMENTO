@@ -24,6 +24,9 @@ export interface ResellerUser {
   name: string;
   email: string;
   company: string;
+  password?: string; // Senha do usuário
+  mustChangePassword?: boolean; // Flag para primeiro acesso
+  linkedCompanyId?: string; 
   status: 'Ativo' | 'Inativo';
   expirationDate: string;
 }
@@ -40,5 +43,6 @@ export interface AuthState {
   user: {
     name: string;
     role: 'admin' | 'reseller';
+    linkedCompanyId?: string;
   } | null;
 }
