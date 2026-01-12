@@ -14,12 +14,14 @@ import {
   LayoutDashboard, 
   PlusCircle, 
   Menu,
-  X,
   Users,
   Building2,
   RefreshCw,
   LogOut,
-  Database
+  Database,
+  CloudOff,
+  AlertTriangle,
+  ServerCrash
 } from 'lucide-react';
 
 const STORAGE_KEYS = {
@@ -43,45 +45,43 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [usingCloud, setUsingCloud] = useState(false);
+  
+  const [cloudStatus, setCloudStatus] = useState<'connecting' | 'connected' | 'error' | 'local'>('connecting');
+  const [cloudMessage, setCloudMessage] = useState('');
 
-  useEffect(() => {
-    const loadData = async () => {
-      let loadedCompanies: CompanyData[] = [];
-      let fromCloud = false;
-      
-      try {
-        const cloudData = await supabaseService.getCompanies();
-        if (cloudData && cloudData.length > 0) {
-          loadedCompanies = cloudData;
-          fromCloud = true;
-        } else {
-          const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
-          loadedCompanies = saved ? JSON.parse(saved) : [];
-        }
-      } catch (err) {
-        console.warn("Falha ao acessar nuvem, carregando local...");
-        const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
-        loadedCompanies = saved ? JSON.parse(saved) : [];
-      }
+  const loadData = async () => {
+    setCloudStatus('connecting');
+    const connection = await supabaseService.testConnection();
+    
+    if (connection.success) {
+      setCloudStatus('connected');
+      const cloudData = await supabaseService.getCompanies();
+      const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
+      const localCompanies: CompanyData[] = saved ? JSON.parse(saved) : [];
 
-      const finalCompanies = [...loadedCompanies];
-      GLOBAL_COMPANIES_DATA.forEach(global => {
-        if (!finalCompanies.some(c => c.id === global.id)) {
-          finalCompanies.push(global);
-        }
+      const merged = [...cloudData];
+      localCompanies.forEach(lc => {
+        if (!merged.some(mc => mc.id === lc.id)) merged.push(lc);
       });
 
-      setAllCompanies(finalCompanies);
-      setUsingCloud(fromCloud);
-      setIsLoading(false);
-    };
+      GLOBAL_COMPANIES_DATA.forEach(gc => {
+        if (!merged.some(m => m.id === gc.id)) merged.push(gc);
+      });
 
-    if (auth.isAuthenticated) {
-      loadData();
+      setAllCompanies(merged);
     } else {
-      setIsLoading(false);
+      setCloudStatus(connection.message.includes('Tabela') ? 'error' : 'local');
+      setCloudMessage(connection.message);
+      const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
+      const local = saved ? JSON.parse(saved) : [];
+      setAllCompanies([...local, ...GLOBAL_COMPANIES_DATA]);
     }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    if (auth.isAuthenticated) loadData();
+    else setIsLoading(false);
   }, [auth.isAuthenticated]);
 
   useEffect(() => {
@@ -90,40 +90,44 @@ const App: React.FC = () => {
     }
   }, [allCompanies]);
 
-  useEffect(() => {
-    if (activeCompanyId) {
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, activeCompanyId);
-    }
-  }, [activeCompanyId]);
-
   const visibleCompanies = useMemo(() => {
     if (!auth.user) return [];
     if (auth.user.role === 'admin') return allCompanies;
-    if (auth.user.linkedCompanyId) {
-      return allCompanies.filter(c => c.id === auth.user?.linkedCompanyId);
-    }
-    return [];
+    return allCompanies.filter(c => c.id === auth.user?.linkedCompanyId);
   }, [allCompanies, auth.user]);
-
-  useEffect(() => {
-    if (auth.isAuthenticated && !activeCompanyId) {
-      if (auth.user?.linkedCompanyId) {
-        setActiveCompanyId(auth.user.linkedCompanyId);
-      } else if (visibleCompanies.length > 0) {
-        setActiveCompanyId(visibleCompanies[0].id);
-      }
-    }
-  }, [auth.isAuthenticated, auth.user, activeCompanyId, visibleCompanies]);
 
   const activeCompany = useMemo(() => 
     visibleCompanies.find(c => c.id === activeCompanyId) || null
   , [visibleCompanies, activeCompanyId]);
 
+  // Fix: Trigger AI payroll analysis when on dashboard tab and data is available
+  useEffect(() => {
+    const triggerAnalysis = async () => {
+      if (activeCompany && activeCompany.payrollEntries.length > 0) {
+        setIsGenerating(true);
+        setError(undefined);
+        try {
+          const result = await analyzePayroll(activeCompany.payrollEntries, activeCompany);
+          setAnalysis(result);
+        } catch (err: any) {
+          setError(err.message);
+        } finally {
+          setIsGenerating(false);
+        }
+      } else {
+        setAnalysis('');
+      }
+    };
+
+    if (activeTab === 'dashboard') {
+      triggerAnalysis();
+    }
+  }, [activeTab, activeCompany]);
+
   const handleLogin = (name: string, role: 'admin' | 'reseller', linkedCompanyId?: string) => {
     const newState = { isAuthenticated: true, user: { name, role, linkedCompanyId } };
-    setAuth(newState);
+    setAuth(newState as AuthState);
     localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(newState));
-    
     if (linkedCompanyId) {
       setActiveCompanyId(linkedCompanyId);
       setActiveTab('lancamento');
@@ -139,19 +143,14 @@ const App: React.FC = () => {
 
   const handleUpdatePayroll = async (entries: PayrollData[]) => {
     if (!activeCompanyId) return;
-
     const currentEntries = activeCompany?.payrollEntries || [];
     
     if (entries.length < currentEntries.length) {
       const deleted = currentEntries.find(ce => !entries.some(e => e.id === ce.id));
-      if (deleted) {
-        try { await supabaseService.deletePayrollEntry(deleted.id); } catch(e){}
-      }
+      if (deleted) try { await supabaseService.deletePayrollEntry(deleted.id); } catch(e){}
     } else {
       const lastEntry = entries[entries.length - 1];
-      if (lastEntry) {
-        try { await supabaseService.savePayrollEntry(activeCompanyId, lastEntry); } catch(e){}
-      }
+      if (lastEntry) try { await supabaseService.savePayrollEntry(activeCompanyId, lastEntry); } catch(e){}
     }
 
     setAllCompanies(prev => prev.map(c => 
@@ -159,26 +158,11 @@ const App: React.FC = () => {
     ));
   };
 
-  const handleGenerateAnalysis = async () => {
-    if (!activeCompany || activeCompany.payrollEntries.length === 0) return;
-    setActiveTab('dashboard');
-    setIsGenerating(true);
-    setError(undefined);
-    try {
-      const result = await analyzePayroll(activeCompany.payrollEntries, activeCompany);
-      setAnalysis(result);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white font-black">
         <BrainCircuit className="w-16 h-16 text-blue-500 animate-bounce mb-6" />
-        <p className="uppercase tracking-[0.3em] text-xs opacity-50 text-center">Iniciando Sincronização Global...</p>
+        <p className="uppercase tracking-[0.3em] text-[10px] opacity-50 text-center">Iniciando protocolo de nuvem...</p>
       </div>
     );
   }
@@ -204,7 +188,6 @@ const App: React.FC = () => {
             <button onClick={() => {setActiveTab('dashboard'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600' : 'text-slate-400 hover:bg-slate-800'}`}>
               <LayoutDashboard className="w-5 h-5" /> Dashboard
             </button>
-            
             {auth.user?.role === 'admin' && (
               <button onClick={() => {setActiveTab('usuarios'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${activeTab === 'usuarios' ? 'bg-blue-600' : 'text-slate-400 hover:bg-slate-800'}`}>
                 <Users className="w-5 h-5" /> Usuários
@@ -213,22 +196,34 @@ const App: React.FC = () => {
           </nav>
 
           <div className="p-6 border-t border-slate-800">
-            <div className="bg-slate-800/50 p-4 rounded-2xl border border-white/5 mb-4 text-center">
-              <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${usingCloud ? 'text-blue-400' : 'text-amber-500'}`}>
-                <Database className="w-3 h-3 inline mr-1" />
-                {usingCloud ? 'Nuvem Ativa' : 'Modo Offline'}
+            <div className={`p-4 rounded-2xl border mb-4 text-center transition-all ${
+              cloudStatus === 'connected' ? 'bg-blue-500/10 border-blue-500/30' : 
+              cloudStatus === 'error' ? 'bg-red-500/10 border-red-500/30 animate-shake' : 
+              'bg-amber-500/10 border-amber-500/30'
+            }`}>
+              <p className={`text-[10px] font-black uppercase tracking-widest mb-1 flex items-center justify-center gap-2 ${
+                cloudStatus === 'connected' ? 'text-blue-400' : 
+                cloudStatus === 'error' ? 'text-red-400' : 
+                'text-amber-500'
+              }`}>
+                {cloudStatus === 'connected' ? <Database className="w-3 h-3" /> : 
+                 cloudStatus === 'error' ? <ServerCrash className="w-3 h-3" /> : <CloudOff className="w-3 h-3" />}
+                {cloudStatus === 'connected' ? 'Sincronizado' : 
+                 cloudStatus === 'error' ? 'Erro de Banco' : 'Modo Offline'}
               </p>
+              
+              {cloudStatus === 'error' && (
+                <p className="text-[8px] text-red-300 font-black uppercase leading-tight mb-2">Execute o SQL na Supabase</p>
+              )}
+
               <p className="text-xs font-black text-slate-200 truncate">{auth.user?.name}</p>
               <button onClick={handleLogout} className="mt-4 w-full text-[10px] text-red-400 font-black py-2 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center gap-2 uppercase">
                 <LogOut className="w-3 h-3" /> Sair
               </button>
             </div>
-            <button 
-              onClick={handleGenerateAnalysis} 
-              disabled={isGenerating || !activeCompany} 
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-blue-600/20"
-            >
-              {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin mx-auto" /> : 'GERAR INSIGHTS AI'}
+            
+            <button onClick={loadData} className="w-full text-[9px] font-black text-slate-500 hover:text-white uppercase flex items-center justify-center gap-2 mb-4">
+              <RefreshCw className="w-3 h-3" /> Forçar Recarregamento
             </button>
           </div>
         </div>
@@ -238,16 +233,12 @@ const App: React.FC = () => {
         <header className="bg-white border-b border-slate-200 p-6 flex justify-between items-center sticky top-0 z-40">
            <div className="flex items-center gap-4">
              <button onClick={() => setIsMenuOpen(true)} className="md:hidden p-2 bg-slate-100 rounded-xl"><Menu /></button>
-             <h2 className="text-2xl font-black text-slate-900">
+             <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">
                 {activeTab === 'empresa' && 'Empresas'}
                 {activeTab === 'lancamento' && 'Folha de Pagamento'}
                 {activeTab === 'dashboard' && 'Estratégia RH'}
                 {activeTab === 'usuarios' && 'Controle de Usuários'}
              </h2>
-           </div>
-           <div className="hidden sm:block text-right">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidade Global</p>
-              <p className="text-sm font-black text-slate-800 truncate max-w-[200px]">{activeCompany?.name || 'Selecione uma empresa'}</p>
            </div>
         </header>
 
@@ -260,22 +251,15 @@ const App: React.FC = () => {
                 try {
                   await supabaseService.saveCompany(data);
                   setAllCompanies(prev => [...prev, data]);
-                  setActiveCompanyId(data.id);
-                  setActiveTab('lancamento');
-                } catch (err) {
-                  alert("Empresa salva localmente. Sincronize o banco de dados no Supabase para salvar na nuvem.");
-                  setAllCompanies(prev => [...prev, data]);
-                  setActiveCompanyId(data.id);
+                } catch (err: any) {
+                  alert(err.message);
                 }
               }} 
               onSelect={(id) => {setActiveCompanyId(id); setActiveTab('lancamento');}} 
               onDelete={async (id) => {
-                if (window.confirm('Excluir empresa?')) {
-                  try {
-                    await supabaseService.deleteCompany(id);
-                  } catch (err) {}
+                if (window.confirm('Excluir empresa permanentemente?')) {
+                  try { await supabaseService.deleteProfile(id); } catch (err) {}
                   setAllCompanies(prev => prev.filter(c => c.id !== id));
-                  if (activeCompanyId === id) setActiveCompanyId(null);
                 }
               }} 
             />
@@ -288,14 +272,6 @@ const App: React.FC = () => {
           )}
           {activeTab === 'usuarios' && auth.user?.role === 'admin' && (
             <UserManagement companies={allCompanies} />
-          )}
-          
-          {(activeTab === 'lancamento' || activeTab === 'dashboard') && !activeCompany && (
-            <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-               <Building2 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-               <h3 className="text-xl font-black text-slate-400">Selecione uma empresa</h3>
-               <button onClick={() => setActiveTab('empresa')} className="mt-6 text-blue-600 font-black hover:underline uppercase text-xs tracking-widest">Ver Painel de Empresas</button>
-            </div>
           )}
         </div>
       </main>
