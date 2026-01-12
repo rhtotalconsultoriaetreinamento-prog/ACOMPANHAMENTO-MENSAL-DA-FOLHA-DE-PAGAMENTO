@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ResellerUser, CompanyData } from '../types';
-import { Users, UserPlus, Trash2, Edit3, ShieldCheck, ShieldAlert, Search, X, Building, Lock, Eye, EyeOff, RefreshCw, Cloud, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit3, Search, X, Lock, Eye, EyeOff, RefreshCw, Cloud, CheckCircle, Globe, AlertCircle } from 'lucide-react';
 import { supabaseService } from '../services/supabase';
 import { GLOBAL_USERS } from '../services/authService';
 
@@ -31,23 +31,22 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
   const loadUsers = async () => {
     setIsLoading(true);
     try {
+      // Prioridade total ao Servidor Global
       const cloudUsers = await supabaseService.getProfiles();
       
-      // Merge com locais e globais para visualização completa
-      const localSaved = localStorage.getItem('gestorpro_users_data');
-      const localUsers: ResellerUser[] = localSaved ? JSON.parse(localSaved) : [];
-      
-      // Filtra duplicatas priorizando Cloud
+      // Merge com os usuários estáticos (Silva/RH Total)
       const combined = [...cloudUsers];
-      [...GLOBAL_USERS, ...localUsers].forEach(l => {
-        if (!combined.some(c => c.email.toLowerCase() === l.email.toLowerCase())) {
-          combined.push(l);
+      GLOBAL_USERS.forEach(gu => {
+        if (!combined.some(c => c.email.toLowerCase() === gu.email.toLowerCase())) {
+          combined.push(gu);
         }
       });
       
       setUsers(combined);
+      // Atualiza cache local apenas para visualização offline
+      localStorage.setItem('gestorpro_users_data', JSON.stringify(combined));
     } catch (e) {
-      console.error("Erro ao sincronizar usuários:", e);
+      console.error("Falha ao sincronizar com servidor global:", e);
     } finally {
       setIsLoading(false);
     }
@@ -59,7 +58,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
 
   const handleSave = async () => {
     if (!formData.name || !formData.email || (!editingUserId && !formData.password)) {
-      alert('Preencha os campos obrigatórios.');
+      alert('Preencha os campos obrigatórios (Nome, E-mail e Senha).');
+      return;
+    }
+
+    if (!supabaseService.isConnected()) {
+      alert('ERRO DE CONEXÃO: O Servidor Global não está acessível. Para que o usuário funcione em qualquer computador, você precisa estar online e com o banco de dados configurado.');
       return;
     }
 
@@ -69,42 +73,33 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
     const targetUser: ResellerUser = {
       ...formData,
       id: editingUserId || Math.random().toString(36).substr(2, 9),
-      company: selectedCompany?.name || formData.company,
-      mustChangePassword: !editingUserId
+      company: selectedCompany?.name || (formData.linkedCompanyId === '' ? 'Acesso Total' : formData.company),
+      mustChangePassword: false
     };
 
     try {
-      // TENTA NUVEM PRIMEIRO (Crucial para multi-dispositivo)
+      // SALVAMENTO OBRIGATÓRIO NA NUVEM
       await supabaseService.saveProfile(targetUser);
       
-      // Se salvou na nuvem, atualiza local também
-      const updatedUsers = users.map(u => u.id === targetUser.id ? targetUser : u);
-      if (!editingUserId) updatedUsers.push(targetUser);
-      setUsers(updatedUsers);
-      localStorage.setItem('gestorpro_users_data', JSON.stringify(updatedUsers));
-      
+      await loadUsers(); // Recarrega da nuvem para garantir
       setShowModal(false);
-      alert('Usuário salvo com sucesso na NUVEM! Acesso liberado em qualquer computador.');
+      alert(`SUCESSO! O usuário ${targetUser.name} agora é um USUÁRIO GLOBAL e pode acessar de qualquer computador.`);
     } catch (e) {
       console.error(e);
-      if (window.confirm('Falha na sincronização Cloud. Deseja salvar apenas neste computador? (Não funcionará em outros dispositivos)')) {
-        const updatedUsers = users.map(u => u.id === targetUser.id ? targetUser : u);
-        if (!editingUserId) updatedUsers.push(targetUser);
-        setUsers(updatedUsers);
-        localStorage.setItem('gestorpro_users_data', JSON.stringify(updatedUsers));
-        setShowModal(false);
-      }
+      alert('FALHA NA SINCRONIZAÇÃO: Não foi possível salvar no servidor global. O usuário NÃO foi criado para garantir a integridade do sistema multi-dispositivo.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const deleteUser = async (id: string) => {
-    if (window.confirm('Excluir usuário permanentemente?')) {
-      try { await supabaseService.deleteProfile(id); } catch (e) {}
-      const updated = users.filter(u => u.id !== id);
-      setUsers(updated);
-      localStorage.setItem('gestorpro_users_data', JSON.stringify(updated));
+    if (window.confirm('Excluir usuário do Servidor Global? Ele perderá acesso em todos os dispositivos.')) {
+      try { 
+        await supabaseService.deleteProfile(id); 
+        setUsers(users.filter(u => u.id !== id));
+      } catch (e) {
+        alert('Erro ao excluir na nuvem.');
+      }
     }
   };
 
@@ -121,61 +116,83 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Buscar usuários..."
+              placeholder="Pesquisar usuários globais..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-bold shadow-sm"
+              className="w-full pl-10 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-bold shadow-sm"
             />
           </div>
-          <button onClick={loadUsers} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
-             <RefreshCw className={`w-5 h-5 text-slate-500 ${isLoading ? 'animate-spin' : ''}`} />
+          <button onClick={loadUsers} className="p-4 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all shadow-sm">
+             <RefreshCw className={`w-5 h-5 text-blue-600 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>
         
         <button 
-          onClick={() => { setEditingUserId(null); setShowModal(true); }}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-black px-6 py-3 rounded-xl flex items-center gap-2 shadow-xl shadow-blue-600/20"
+          onClick={() => { setEditingUserId(null); setFormData({name: '', email: '', company: '', password: '', linkedCompanyId: '', status: 'Ativo', expirationDate: ''}); setShowModal(true); }}
+          className="bg-slate-900 hover:bg-black text-white font-black px-8 py-4 rounded-2xl flex items-center gap-3 shadow-xl transition-all active:scale-95"
         >
-          <UserPlus className="w-5 h-5" /> NOVO USUÁRIO
+          <UserPlus className="w-5 h-5" /> CADASTRAR ACESSO GLOBAL
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-           <Cloud className="w-4 h-4 text-blue-500" />
-           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Servidor Global: {supabaseService.isConnected() ? '🟢 Conectado' : '🔴 Modo Local (Offline)'}</p>
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden">
+        <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+           <div className="flex items-center gap-3">
+             <Globe className={`w-5 h-5 ${supabaseService.isConnected() ? 'text-emerald-500' : 'text-red-500'}`} />
+             <p className="text-xs font-black text-slate-600 uppercase tracking-widest">
+               Status do Servidor: {supabaseService.isConnected() ? 'CONECTADO (Sincronização Ativa)' : 'DESCONECTADO'}
+             </p>
+           </div>
+           <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase">
+             {users.length} Usuários Identificados
+           </span>
         </div>
+        
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-900 text-white font-black uppercase tracking-widest text-[10px]">
-              <tr>
-                <th className="px-6 py-4">Usuário / E-mail</th>
-                <th className="px-6 py-4">Acesso Empresa</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Ações</th>
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em]">
+                <th className="px-8 py-5">Identificação</th>
+                <th className="px-8 py-5">Tipo de Acesso</th>
+                <th className="px-8 py-5">Modo de Sincronia</th>
+                <th className="px-8 py-5">Status</th>
+                <th className="px-8 py-5 text-right">Gestão</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.map(user => (
-                <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-black text-slate-600">{user.name.charAt(0)}</div>
+                <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all text-xl">
+                        {user.name.charAt(0)}
+                      </div>
                       <div>
-                        <p className="font-black text-slate-900">{user.name}</p>
-                        <p className="text-xs text-slate-500 font-medium">{user.email}</p>
+                        <p className="font-black text-slate-900 text-base">{user.name}</p>
+                        <p className="text-xs text-slate-400 font-bold">{user.email}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 font-bold text-blue-600">{user.company || 'Acesso Total'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${user.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                  <td className="px-8 py-6">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black text-blue-600 uppercase tracking-wider">{user.company}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">Empresa Vinculada</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-2 text-emerald-600">
+                      <Cloud className="w-4 h-4" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Global / Cloud</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6">
+                    <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${user.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                       {user.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button onClick={() => { setEditingUserId(user.id); setFormData(user); setShowModal(true); }} className="p-2 text-slate-400 hover:text-blue-600"><Edit3 className="w-4 h-4" /></button>
-                    <button onClick={() => deleteUser(user.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  <td className="px-8 py-6 text-right space-x-2">
+                    <button onClick={() => { setEditingUserId(user.id); setFormData(user); setShowModal(true); }} className="p-3 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl hover:bg-blue-50 transition-all"><Edit3 className="w-4 h-4" /></button>
+                    <button onClick={() => deleteUser(user.id)} className="p-3 text-slate-400 hover:text-red-600 bg-slate-50 rounded-xl hover:bg-red-50 transition-all"><Trash2 className="w-4 h-4" /></button>
                   </td>
                 </tr>
               ))}
@@ -185,65 +202,76 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-100">
-            <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-xl uppercase">{editingUserId ? 'Editar' : 'Novo'} Usuário</h3>
-                <p className="text-slate-400 text-[10px] font-black uppercase mt-1">Sincronização Cloud Ativa</p>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl overflow-hidden border border-white/20">
+            <div className="p-10 bg-slate-900 text-white flex justify-between items-center relative">
+              <div className="absolute top-0 right-0 p-8 opacity-5">
+                <Globe className="w-32 h-32" />
               </div>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors"><X className="w-6 h-6" /></button>
+              <div className="relative z-10">
+                <h3 className="font-black text-2xl uppercase tracking-tight">{editingUserId ? 'Editar' : 'Novo'} Acesso Global</h3>
+                <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
+                  <Cloud className="w-3 h-3" /> Sincronização em Tempo Real Ativa
+                </p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors relative z-10"><X className="w-8 h-8" /></button>
             </div>
             
-            <div className="p-8 space-y-5">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nome</label>
-                <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">E-mail</label>
-                <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Senha Privada</label>
-                <div className="relative">
-                  <input type={showPassword ? "text" : "password"} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold" />
-                  <button onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+            <div className="p-10 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Completo</label>
+                  <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nome do Gestor" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail de Acesso</label>
+                  <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="exemplo@email.com" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none" />
                 </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Vincular Empresa</label>
-                <select value={formData.linkedCompanyId} onChange={e => setFormData({...formData, linkedCompanyId: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold cursor-pointer">
-                  <option value="">Acesso Geral (Admin)</option>
-                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Status</label>
-                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold">
-                    <option value="Ativo">Ativo</option>
-                    <option value="Inativo">Inativo</option>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Definir Senha</label>
+                  <div className="relative">
+                    <input type={showPassword ? "text" : "password"} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="••••••••" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none" />
+                    <button onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600">
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Empresa Alvo</label>
+                  <select value={formData.linkedCompanyId} onChange={e => setFormData({...formData, linkedCompanyId: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none cursor-pointer appearance-none">
+                    <option value="">ACESSO TOTAL (Administrador)</option>
+                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Validade</label>
-                  <input type="date" value={formData.expirationDate} onChange={e => setFormData({...formData, expirationDate: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status da Conta</label>
+                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none">
+                    <option value="Ativo">ATIVO</option>
+                    <option value="Inativo">INATIVO</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data de Expiração</label>
+                  <input type="date" value={formData.expirationDate} onChange={e => setFormData({...formData, expirationDate: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none" />
                 </div>
               </div>
             </div>
 
-            <div className="p-8 bg-slate-50 border-t flex gap-4">
-              <button onClick={() => setShowModal(false)} className="flex-1 py-4 text-xs font-black uppercase text-slate-400">Cancelar</button>
+            <div className="p-10 bg-slate-50 border-t flex flex-col sm:flex-row gap-4">
+              <button onClick={() => setShowModal(false)} className="flex-1 py-5 text-xs font-black uppercase text-slate-400 hover:text-slate-600 transition-colors">Cancelar Operação</button>
               <button 
                 onClick={handleSave} 
                 disabled={isSaving}
-                className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2"
+                className="flex-[2] py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50"
               >
-                {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                {editingUserId ? 'Salvar Alterações' : 'Criar e Sincronizar'}
+                {isSaving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                {editingUserId ? 'Confirmar Alterações' : 'Criar Acesso Global Agora'}
               </button>
             </div>
           </div>
