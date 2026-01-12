@@ -3,7 +3,7 @@ import { ResellerUser, CompanyData } from '../types';
 import { supabaseService } from './supabase';
 
 /**
- * LISTA DE USUÁRIOS GLOBAIS (ACESSÍVEIS DE QUALQUER DISPOSITIVO)
+ * LISTA DE USUÁRIOS GLOBAIS (ESTÁTICOS)
  */
 export const GLOBAL_USERS: ResellerUser[] = [
   {
@@ -31,7 +31,7 @@ export const GLOBAL_USERS: ResellerUser[] = [
 ];
 
 /**
- * DADOS MESTRES PARA NOVOS USUÁRIOS (FAILSAFE)
+ * DADOS MESTRES (FAILSAFE)
  */
 export const GLOBAL_COMPANIES_DATA: CompanyData[] = [
   {
@@ -55,42 +55,31 @@ export const GLOBAL_COMPANIES_DATA: CompanyData[] = [
         contractedValue: 4000,
         commissionedCount: 1,
         commissionedValue: 2500
-      },
-      {
-        id: 'init-rh-2',
-        monthYear: 'Fevereiro/2024',
-        totalValue: 19200,
-        effectiveCount: 4,
-        effectiveValue: 12500,
-        contractedCount: 2,
-        contractedValue: 4200,
-        commissionedCount: 1,
-        commissionedValue: 2500
       }
     ]
   }
 ];
 
 /**
- * Busca usuário de forma assíncrona: Global -> Supabase -> LocalStorage
+ * Busca usuário: Prioriza Nuvem (para multi-acesso) -> Estáticos -> Local
  */
 export const findUserByEmail = async (email: string): Promise<ResellerUser | undefined> => {
   const normalizedEmail = email.trim().toLowerCase();
   
-  // 1. Procura na lista Global (Código)
-  const global = GLOBAL_USERS.find(u => u.email.toLowerCase() === normalizedEmail);
-  if (global) return global;
-
-  // 2. Procura no Supabase (Nuvem) - Essencial para novos usuários criados
+  // 1. TENTA NUVEM (Obrigatório para multi-dispositivo)
   try {
     const cloudUsers = await supabaseService.getProfiles();
     const cloudMatch = cloudUsers.find(u => u.email.toLowerCase() === normalizedEmail);
     if (cloudMatch) return cloudMatch;
   } catch (e) {
-    console.warn("Falha na consulta cloud, tentando cache local.");
+    console.warn("AuthService: Falha na nuvem, verificando locais...");
   }
 
-  // 3. Procura na lista Local (Cache do Navegador)
+  // 2. TENTA ESTÁTICOS (Hardcoded)
+  const global = GLOBAL_USERS.find(u => u.email.toLowerCase() === normalizedEmail);
+  if (global) return global;
+
+  // 3. TENTA CACHE LOCAL (Apenas no PC atual)
   const savedUsersStr = localStorage.getItem('gestorpro_users_data');
   const localUsers: ResellerUser[] = savedUsersStr ? JSON.parse(savedUsersStr) : [];
   return localUsers.find(u => u.email.toLowerCase() === normalizedEmail);
