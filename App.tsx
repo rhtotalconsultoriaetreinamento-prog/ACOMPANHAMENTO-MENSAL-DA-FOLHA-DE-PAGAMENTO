@@ -8,7 +8,6 @@ import Login from './components/Login';
 import { PayrollData, AppTab, AuthState, CompanyData } from './types';
 import { analyzePayroll } from './services/geminiService';
 import { supabaseService } from './services/supabase';
-import { GLOBAL_COMPANIES_DATA } from './services/authService';
 import { 
   BrainCircuit, 
   LayoutDashboard, 
@@ -56,25 +55,12 @@ const App: React.FC = () => {
     if (connection.success) {
       setCloudStatus('connected');
       const cloudData = await supabaseService.getCompanies();
-      const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
-      const localCompanies: CompanyData[] = saved ? JSON.parse(saved) : [];
-
-      const merged = [...cloudData];
-      localCompanies.forEach(lc => {
-        if (!merged.some(mc => mc.id === lc.id)) merged.push(lc);
-      });
-
-      GLOBAL_COMPANIES_DATA.forEach(gc => {
-        if (!merged.some(m => m.id === gc.id)) merged.push(gc);
-      });
-
-      setAllCompanies(merged);
+      setAllCompanies(cloudData);
     } else {
       setCloudStatus(connection.message.includes('Tabela') ? 'error' : 'local');
       setCloudMessage(connection.message);
       const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
-      const local = saved ? JSON.parse(saved) : [];
-      setAllCompanies([...local, ...GLOBAL_COMPANIES_DATA]);
+      setAllCompanies(saved ? JSON.parse(saved) : []);
     }
     setIsLoading(false);
   };
@@ -100,7 +86,6 @@ const App: React.FC = () => {
     visibleCompanies.find(c => c.id === activeCompanyId) || null
   , [visibleCompanies, activeCompanyId]);
 
-  // Fix: Trigger AI payroll analysis when on dashboard tab and data is available
   useEffect(() => {
     const triggerAnalysis = async () => {
       if (activeCompany && activeCompany.payrollEntries.length > 0) {
@@ -143,19 +128,16 @@ const App: React.FC = () => {
 
   const handleUpdatePayroll = async (entries: PayrollData[]) => {
     if (!activeCompanyId) return;
-    const currentEntries = activeCompany?.payrollEntries || [];
     
-    if (entries.length < currentEntries.length) {
-      const deleted = currentEntries.find(ce => !entries.some(e => e.id === ce.id));
-      if (deleted) try { await supabaseService.deletePayrollEntry(deleted.id); } catch(e){}
-    } else {
-      const lastEntry = entries[entries.length - 1];
-      if (lastEntry) try { await supabaseService.savePayrollEntry(activeCompanyId, lastEntry); } catch(e){}
-    }
-
     setAllCompanies(prev => prev.map(c => 
       c.id === activeCompanyId ? { ...c, payrollEntries: entries } : c
     ));
+
+    // Persistência na nuvem para o último lançamento
+    if (entries.length > 0) {
+        const lastEntry = entries[entries.length - 1];
+        try { await supabaseService.savePayrollEntry(activeCompanyId, lastEntry); } catch(e){}
+    }
   };
 
   if (isLoading) {
@@ -211,19 +193,13 @@ const App: React.FC = () => {
                 {cloudStatus === 'connected' ? 'Sincronizado' : 
                  cloudStatus === 'error' ? 'Erro de Banco' : 'Modo Offline'}
               </p>
-              
-              {cloudStatus === 'error' && (
-                <p className="text-[8px] text-red-300 font-black uppercase leading-tight mb-2">Execute o SQL na Supabase</p>
-              )}
-
               <p className="text-xs font-black text-slate-200 truncate">{auth.user?.name}</p>
               <button onClick={handleLogout} className="mt-4 w-full text-[10px] text-red-400 font-black py-2 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center gap-2 uppercase">
                 <LogOut className="w-3 h-3" /> Sair
               </button>
             </div>
-            
             <button onClick={loadData} className="w-full text-[9px] font-black text-slate-500 hover:text-white uppercase flex items-center justify-center gap-2 mb-4">
-              <RefreshCw className="w-3 h-3" /> Forçar Recarregamento
+              <RefreshCw className="w-3 h-3" /> Forçar Sincronização
             </button>
           </div>
         </div>

@@ -27,7 +27,13 @@ REGRAS:
 `;
 
 export const analyzePayroll = async (data: PayrollData[], company: CompanyData): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("O servidor de IA está indisponível (Chave de API não configurada).");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const formattedData = data.map(d => 
     `Mês/Ano: ${d.monthYear}
@@ -57,8 +63,11 @@ export const analyzePayroll = async (data: PayrollData[], company: CompanyData):
     });
 
     return response.text || "Não foi possível gerar a análise no momento.";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error generating analysis:", error);
+    if (error.message?.includes('API Key')) {
+        throw new Error("Erro de Protocolo: A chave de IA não foi reconhecida pelo navegador.");
+    }
     throw new Error("Falha na comunicação com o especialista de IA.");
   }
 };

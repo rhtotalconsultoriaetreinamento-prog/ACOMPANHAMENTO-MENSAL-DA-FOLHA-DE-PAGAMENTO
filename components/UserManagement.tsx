@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { ResellerUser, CompanyData } from '../types';
 import { Users, UserPlus, Trash2, Edit3, Search, X, Lock, Eye, EyeOff, RefreshCw, Cloud, CheckCircle, Globe, ShieldAlert } from 'lucide-react';
 import { supabaseService } from '../services/supabase';
-import { GLOBAL_USERS } from '../services/authService';
 
 interface UserManagementProps {
   companies: CompanyData[];
@@ -33,18 +32,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
     setIsLoading(true);
     try {
       const cloudUsers = await supabaseService.getProfiles();
-      
-      const combined = [...cloudUsers];
-      GLOBAL_USERS.forEach(gu => {
-        if (!combined.some(c => c.email.toLowerCase() === gu.email.toLowerCase())) {
-          combined.push(gu);
-        }
-      });
-      
-      setUsers(combined);
-      localStorage.setItem('gestorpro_users_data', JSON.stringify(combined));
+      setUsers(cloudUsers);
+      localStorage.setItem('gestorpro_users_data', JSON.stringify(cloudUsers));
     } catch (e) {
-      console.error("Falha ao sincronizar com servidor global:", e);
+      console.error("Falha ao sincronizar usuários:", e);
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +65,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
       await supabaseService.saveProfile(targetUser);
       await loadUsers();
       setShowModal(false);
-      alert(`O usuário ${targetUser.name} foi configurado como ${targetUser.role === 'admin' ? 'ADMINISTRADOR' : 'GESTOR'}.`);
     } catch (e) {
       alert('FALHA NA SINCRONIZAÇÃO NUVEM.');
     } finally {
@@ -106,7 +96,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Pesquisar usuários globais..."
+              placeholder="Pesquisar usuários..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-bold shadow-sm"
@@ -127,54 +117,58 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
 
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em]">
-                <th className="px-8 py-5">Nome</th>
-                <th className="px-8 py-5">Função</th>
-                <th className="px-8 py-5">Vínculo</th>
-                <th className="px-8 py-5">Status</th>
-                <th className="px-8 py-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredUsers.map(user => (
-                <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
-                  <td className="px-8 py-6">
-                    <div>
-                      <p className="font-black text-slate-900">{user.name}</p>
-                      <p className="text-xs text-slate-400 font-bold">{user.email}</p>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-2">
-                      {user.role === 'admin' ? (
-                        <span className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest">
-                          <ShieldAlert className="w-3 h-3" /> Administrador
-                        </span>
-                      ) : (
-                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
-                          Gestor / Operação
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <span className="text-xs font-black text-slate-600 uppercase truncate max-w-[150px] block">{user.company}</span>
-                  </td>
-                  <td className="px-8 py-6">
-                    <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${user.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                      {user.status}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6 text-right space-x-2">
-                    <button onClick={() => { setEditingUserId(user.id); setFormData(user); setShowModal(true); }} className="p-3 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl hover:bg-blue-50 transition-all"><Edit3 className="w-4 h-4" /></button>
-                    <button onClick={() => deleteUser(user.id)} className="p-3 text-slate-400 hover:text-red-600 bg-slate-50 rounded-xl hover:bg-red-50 transition-all"><Trash2 className="w-4 h-4" /></button>
-                  </td>
+          {users.length === 0 ? (
+            <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">Nenhum usuário cadastrado no banco de dados</div>
+          ) : (
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em]">
+                  <th className="px-8 py-5">Nome</th>
+                  <th className="px-8 py-5">Função</th>
+                  <th className="px-8 py-5">Vínculo</th>
+                  <th className="px-8 py-5">Status</th>
+                  <th className="px-8 py-5 text-right">Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredUsers.map(user => (
+                  <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
+                    <td className="px-8 py-6">
+                      <div>
+                        <p className="font-black text-slate-900">{user.name}</p>
+                        <p className="text-xs text-slate-400 font-bold">{user.email}</p>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-2">
+                        {user.role === 'admin' ? (
+                          <span className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest">
+                            <ShieldAlert className="w-3 h-3" /> Administrador
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                            Gestor / Operação
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className="text-xs font-black text-slate-600 uppercase truncate max-w-[150px] block">{user.company}</span>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${user.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                        {user.status}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6 text-right space-x-2">
+                      <button onClick={() => { setEditingUserId(user.id); setFormData(user); setShowModal(true); }} className="p-3 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl hover:bg-blue-50 transition-all"><Edit3 className="w-4 h-4" /></button>
+                      <button onClick={() => deleteUser(user.id)} className="p-3 text-slate-400 hover:text-red-600 bg-slate-50 rounded-xl hover:bg-red-50 transition-all"><Trash2 className="w-4 h-4" /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
