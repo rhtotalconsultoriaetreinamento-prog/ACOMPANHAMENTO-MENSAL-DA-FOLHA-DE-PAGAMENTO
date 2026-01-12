@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { PayrollData, CompanyData } from '../types';
-import { Plus, Trash2, Calendar, Users, DollarSign, Calculator, Briefcase, Edit3, CheckCircle, FileDown, Image as ImageIcon, FileText, Building2 } from 'lucide-react';
+import { Plus, Trash2, Calendar, Users, DollarSign, Calculator, Briefcase, Edit3, CheckCircle, FileDown, Image as ImageIcon, FileText, Building2, Upload } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -13,6 +13,7 @@ interface DataFormProps {
 
 const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }) => {
   const tableRef = useRef<HTMLDivElement>(null);
+  const fileImportRef = useRef<HTMLInputElement>(null);
   const [selectedMonth, setSelectedMonth] = useState('Janeiro');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -37,7 +38,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
   const years = Array.from({ length: 2040 - 2000 + 1 }, (_, i) => (2000 + i).toString());
 
   useEffect(() => {
-    const total = newEntry.effectiveValue + newEntry.contractedValue + newEntry.commissionedValue;
+    const total = (newEntry.effectiveValue || 0) + (newEntry.contractedValue || 0) + (newEntry.commissionedValue || 0);
     setNewEntry(prev => ({ ...prev, totalValue: total }));
   }, [newEntry.effectiveValue, newEntry.contractedValue, newEntry.commissionedValue]);
 
@@ -47,19 +48,29 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
   }, [selectedMonth, selectedYear]);
 
   const handleAddOrUpdate = () => {
-    if (newEntry.totalValue <= 0) return;
+    if (newEntry.totalValue <= 0 && (newEntry.effectiveCount + newEntry.contractedCount + newEntry.commissionedCount) <= 0) {
+      alert("Por favor, preencha ao menos uma quantidade ou valor.");
+      return;
+    }
+    
     if (editingId) {
       onDataChange(data.map(d => d.id === editingId ? { ...newEntry, id: editingId } : d));
       setEditingId(null);
     } else {
+      // Evita duplicatas de mês/ano
+      if (data.some(d => d.monthYear === newEntry.monthYear)) {
+        if (!window.confirm(`Já existe um lançamento para ${newEntry.monthYear}. Deseja adicionar mesmo assim?`)) return;
+      }
+
       const entry: PayrollData = {
         ...newEntry,
         id: Math.random().toString(36).substr(2, 9),
       };
       onDataChange([...data, entry]);
     }
+
     setNewEntry({
-      ...newEntry,
+      monthYear: `${selectedMonth === '13º Salário' ? '13º' : selectedMonth}/${selectedYear}`,
       totalValue: 0,
       effectiveCount: 0,
       effectiveValue: 0,
@@ -93,6 +104,41 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
       onDataChange(data.filter(d => d.id !== id));
       if (editingId === id) setEditingId(null);
     }
+  };
+
+  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        const importedData = Array.isArray(json) ? json : [json];
+        
+        const validatedData: PayrollData[] = importedData.map(item => ({
+          id: item.id || Math.random().toString(36).substr(2, 9),
+          monthYear: item.monthYear || 'N/A',
+          totalValue: Number(item.totalValue) || 0,
+          effectiveCount: Number(item.effectiveCount) || 0,
+          effectiveValue: Number(item.effectiveValue) || 0,
+          contractedCount: Number(item.contractedCount) || 0,
+          contractedValue: Number(item.contractedValue) || 0,
+          commissionedCount: Number(item.commissionedCount) || 0,
+          commissionedValue: Number(item.commissionedValue) || 0,
+        }));
+
+        if (window.confirm(`Deseja importar ${validatedData.length} registros? Isso substituirá os dados atuais desta empresa.`)) {
+          onDataChange(validatedData);
+        }
+      } catch (err) {
+        alert("Erro ao ler o arquivo JSON. Verifique a formatação.");
+        console.error(err);
+      }
+    };
+    reader.readAsText(file);
+    // Limpa o input para permitir importar o mesmo arquivo novamente se necessário
+    e.target.value = '';
   };
 
   const exportAsImage = async () => {
@@ -132,11 +178,11 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
   };
 
   const totals = data.reduce((acc, curr) => ({
-    effectiveValue: acc.effectiveValue + curr.effectiveValue,
-    contractedValue: acc.contractedValue + curr.contractedValue,
-    commissionedValue: acc.commissionedValue + curr.commissionedValue,
-    totalValue: acc.totalValue + curr.totalValue,
-    totalCount: acc.totalCount + (curr.effectiveCount + curr.contractedCount + curr.commissionedCount)
+    effectiveValue: acc.effectiveValue + (curr.effectiveValue || 0),
+    contractedValue: acc.contractedValue + (curr.contractedValue || 0),
+    commissionedValue: acc.commissionedValue + (curr.commissionedValue || 0),
+    totalValue: acc.totalValue + (curr.totalValue || 0),
+    totalCount: acc.totalCount + ((curr.effectiveCount || 0) + (curr.contractedCount || 0) + (curr.commissionedCount || 0))
   }), { effectiveValue: 0, contractedValue: 0, commissionedValue: 0, totalValue: 0, totalCount: 0 });
 
   return (
@@ -152,7 +198,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Valor da Competência</p>
+          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Custo Total</p>
           <p className="text-3xl font-black text-blue-600">R$ {newEntry.totalValue.toLocaleString('pt-BR')}</p>
         </div>
       </div>
@@ -161,7 +207,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 no-print">
           <div className="md:col-span-2 grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-black text-slate-500 uppercase mb-2 ml-1">Mês / Competência</label>
+              <label className="block text-xs font-black text-slate-500 uppercase mb-2 ml-1">Competência</label>
               <select 
                 value={selectedMonth}
                 onChange={e => setSelectedMonth(e.target.value)}
@@ -293,8 +339,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
             )}
             <button 
               onClick={handleAddOrUpdate}
-              disabled={newEntry.totalValue <= 0}
-              className={`flex-[2] ${editingId ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'} disabled:bg-slate-300 text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-xl active:scale-95 text-lg`}
+              className={`flex-[2] ${editingId ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'} text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-xl active:scale-95 text-lg`}
             >
               {editingId ? <CheckCircle className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
               {editingId ? 'Salvar Alterações' : 'Adicionar Competência'}
@@ -320,7 +365,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Relatório Gerencial</p>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Relatório de Folha</p>
                 <p className="text-xl font-black text-slate-900 mt-1">{new Date().toLocaleDateString('pt-BR')}</p>
               </div>
             </div>
@@ -333,27 +378,42 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5">
             <h3 className="text-sm font-black text-slate-400 uppercase flex items-center gap-3 tracking-[0.2em]">
-              <Calendar className="w-5 h-5 text-blue-500" /> HISTÓRICO LANÇADO
+              <Calendar className="w-5 h-5 text-blue-500" /> HISTÓRICO DE LANÇAMENTOS
             </h3>
             
-            {data.length > 0 && (
-              <div className="flex gap-2 no-print">
-                <button 
-                  onClick={exportAsImage}
-                  disabled={isExporting}
-                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-sm"
-                >
-                  <ImageIcon className="w-4 h-4" /> JPEG
-                </button>
-                <button 
-                  onClick={exportAsPDF}
-                  disabled={isExporting}
-                  className="bg-slate-800 border border-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-sm"
-                >
-                  <FileText className="w-4 h-4" /> PDF
-                </button>
-              </div>
-            )}
+            <div className="flex gap-2 no-print flex-wrap">
+              <input 
+                type="file" 
+                ref={fileImportRef}
+                accept=".json"
+                onChange={handleImportJSON}
+                className="hidden"
+              />
+              <button 
+                onClick={() => fileImportRef.current?.click()}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all"
+              >
+                <Upload className="w-4 h-4" /> IMPORTAR JSON
+              </button>
+              {data.length > 0 && (
+                <>
+                  <button 
+                    onClick={exportAsImage}
+                    disabled={isExporting}
+                    className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-sm"
+                  >
+                    <ImageIcon className="w-4 h-4" /> JPEG
+                  </button>
+                  <button 
+                    onClick={exportAsPDF}
+                    disabled={isExporting}
+                    className="bg-slate-800 border border-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-sm"
+                  >
+                    <FileText className="w-4 h-4" /> PDF
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           
           <div className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm bg-white">
@@ -361,25 +421,29 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
               <thead className="bg-slate-900 text-white border-b border-slate-800">
                 <tr>
                   <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest">PERÍODO</th>
-                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-center text-red-400">QTD</th>
-                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">EFET. (R$)</th>
-                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">CONT. (R$)</th>
-                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">COMIS. (R$)</th>
-                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">TOTAL</th>
+                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-center text-blue-400">COLABORADORES</th>
+                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">EFETIVOS</th>
+                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">CONTRATADOS</th>
+                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">COMISSIONADOS</th>
+                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">TOTAL (R$)</th>
                   <th className="py-5 px-6 text-right no-print"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.map((item) => (
+                {data.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">Nenhum lançamento registrado</td>
+                  </tr>
+                ) : data.map((item) => (
                   <tr key={item.id} className={`hover:bg-blue-50/30 transition-colors ${editingId === item.id ? 'bg-blue-50' : ''}`}>
                     <td className="py-4 px-6 font-bold text-slate-800 text-base">{item.monthYear}</td>
                     <td className="py-4 px-6 text-center font-black text-slate-700 text-base">
-                      {item.effectiveCount + item.contractedCount + item.commissionedCount}
+                      {(item.effectiveCount || 0) + (item.contractedCount || 0) + (item.commissionedCount || 0)}
                     </td>
-                    <td className="py-4 px-6 text-right text-slate-600 font-bold">R$ {item.effectiveValue.toLocaleString('pt-BR')}</td>
-                    <td className="py-4 px-6 text-right text-slate-600 font-bold">R$ {item.contractedValue.toLocaleString('pt-BR')}</td>
-                    <td className="py-4 px-6 text-right text-slate-600 font-bold">R$ {item.commissionedValue.toLocaleString('pt-BR')}</td>
-                    <td className="py-4 px-6 text-right font-black text-blue-700 text-lg">R$ {item.totalValue.toLocaleString('pt-BR')}</td>
+                    <td className="py-4 px-6 text-right text-slate-600 font-bold">R$ {(item.effectiveValue || 0).toLocaleString('pt-BR')}</td>
+                    <td className="py-4 px-6 text-right text-slate-600 font-bold">R$ {(item.contractedValue || 0).toLocaleString('pt-BR')}</td>
+                    <td className="py-4 px-6 text-right text-slate-600 font-bold">R$ {(item.commissionedValue || 0).toLocaleString('pt-BR')}</td>
+                    <td className="py-4 px-6 text-right font-black text-blue-700 text-lg">R$ {(item.totalValue || 0).toLocaleString('pt-BR')}</td>
                     <td className="py-4 px-6 text-right whitespace-nowrap space-x-2 no-print">
                       <button 
                         onClick={() => handleEdit(item)} 
@@ -402,8 +466,8 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, data, activeCompany }
               {data.length > 0 && (
                 <tfoot className="bg-slate-50 border-t-2 border-slate-200">
                   <tr className="bg-slate-100/50">
-                    <td className="py-5 px-6 font-black text-red-600 text-base uppercase tracking-widest">TOTAL</td>
-                    <td className="py-5 px-6 text-center font-black text-slate-900 text-lg underline decoration-red-500 decoration-2">
+                    <td className="py-5 px-6 font-black text-blue-600 text-base uppercase tracking-widest">ACUMULADO</td>
+                    <td className="py-5 px-6 text-center font-black text-slate-900 text-lg underline decoration-blue-500 decoration-2">
                       {totals.totalCount}
                     </td>
                     <td className="py-5 px-6 text-right font-black text-slate-800 text-base">R$ {totals.effectiveValue.toLocaleString('pt-BR')}</td>
