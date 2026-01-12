@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { BrainCircuit, Lock, Mail, Loader2, AlertCircle, Eye, EyeOff, Globe } from 'lucide-react';
-import { findUserByEmail, GLOBAL_USERS } from '../services/authService';
+import { findUserByEmail } from '../services/authService';
 
 interface LoginProps {
   onLogin: (name: string, role: 'admin' | 'reseller', linkedCompanyId?: string) => void;
@@ -14,45 +14,49 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [showPass, setShowPass] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    // Normalização extrema para evitar espaços invisíveis de teclados mobile
     const normalizedEmail = email.trim().toLowerCase().replace(/\s/g, '');
     const cleanPassword = password.trim();
 
-    setTimeout(() => {
-      // 1. ADMIN CENTRAL
+    try {
+      // 1. ADMIN CENTRAL (Hardcoded para segurança absoluta do proprietário)
       if (normalizedEmail === 'admin@gestorpro.com' && cleanPassword === 'admin123') {
         onLogin('Administrador', 'admin');
         return;
       }
 
-      // 2. HARD-BYPASS PARA USUÁRIO PRIORITÁRIO (SILVA)
-      // Garante acesso mesmo se o authService ou LocalStorage falharem
-      const isSilva = normalizedEmail === 'silva.palmeiras2016@gmail.com';
-      if (isSilva && (cleanPassword === 'gestor2024')) {
-        onLogin('Silva Palmeiras', 'reseller', 'comp-silva-01');
-        return;
-      }
-
-      // 3. BUSCA PADRÃO (GLOBAL E LOCAL)
-      const userMatch = findUserByEmail(normalizedEmail);
+      // 2. BUSCA DINÂMICA (Global + Supabase + Local)
+      const userMatch = await findUserByEmail(normalizedEmail);
       
-      if (userMatch && (userMatch.password === cleanPassword || cleanPassword === 'gestor2024')) {
-        if (userMatch.status === 'Inativo') {
-          setError('Sua conta está inativa. Entre em contato com o administrador.');
+      if (userMatch) {
+        // Verifica se a senha confere OU se usou a master password do sistema
+        const isPasswordCorrect = userMatch.password === cleanPassword || cleanPassword === 'gestor2024';
+        
+        if (isPasswordCorrect) {
+          if (userMatch.status === 'Inativo') {
+            setError('Esta conta está inativada. Contate o administrador.');
+            setLoading(false);
+            return;
+          }
+          
+          // Se não tiver linkedCompanyId e não for admin, ele é um usuário com acesso total de consulta
+          onLogin(userMatch.name, 'reseller', userMatch.linkedCompanyId);
+        } else {
+          setError('Senha incorreta. Verifique os dados ou use a master key se autorizado.');
           setLoading(false);
-          return;
         }
-        onLogin(userMatch.name, 'reseller', userMatch.linkedCompanyId);
       } else {
-        setError('Acesso negado. E-mail ou senha incorretos neste dispositivo. Verifique se digitou corretamente.');
+        setError('Usuário não localizado. Verifique o e-mail digitado.');
         setLoading(false);
       }
-    }, 1000);
+    } catch (err) {
+      setError('Erro de conexão ao validar usuário. Tente novamente.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -68,7 +72,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <h1 className="text-3xl font-black tracking-tight mb-2">GestorPro AI</h1>
             <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold uppercase text-[10px] tracking-[0.2em]">
               <Globe className="w-3 h-3" />
-              Conexão Global Ativa
+              Sincronização Cloud Ativa
             </div>
           </div>
           
@@ -76,7 +80,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             {error && (
               <div className="bg-red-50 text-red-600 p-5 rounded-2xl text-xs font-black border border-red-100 animate-shake flex flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" /> ERRO DE ACESSO
+                  <AlertCircle className="w-4 h-4" /> FALHA NA AUTENTICAÇÃO
                 </div>
                 <p className="font-medium opacity-90">{error}</p>
               </div>
@@ -90,16 +94,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   <input 
                     type="email" 
                     required
+                    autoFocus
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="ex: seuemail@gmail.com"
+                    placeholder="usuario@email.com"
                     className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-600 transition-all text-slate-800 font-bold"
                   />
                 </div>
               </div>
               
               <div className="space-y-2">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha Privada</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha de Acesso</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300" />
                   <input 
@@ -122,12 +127,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               disabled={loading}
               className="w-full bg-slate-900 hover:bg-black text-white font-black py-5 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 text-lg active:scale-[0.98] disabled:opacity-50"
             >
-              {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'ENTRAR NO SISTEMA'}
+              {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'ACESSAR PLATAFORMA'}
             </button>
             
-            <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 leading-relaxed">
-              Utilize as credenciais fornecidas pelo administrador para acesso multi-dispositivo.
-            </p>
+            <div className="text-center">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                Gestão Estratégica de Pessoas & BI
+              </p>
+            </div>
           </form>
         </div>
       </div>

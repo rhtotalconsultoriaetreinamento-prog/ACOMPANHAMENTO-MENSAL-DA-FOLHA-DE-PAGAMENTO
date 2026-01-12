@@ -47,7 +47,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string>();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Carregar dados iniciais com merge de dados globais (importante para rhtotal@gmail.com)
+  // Carregar dados iniciais com merge de dados globais
   useEffect(() => {
     const loadData = async () => {
       let loadedCompanies: CompanyData[] = [];
@@ -61,13 +61,11 @@ const App: React.FC = () => {
           loadedCompanies = saved ? JSON.parse(saved) : [];
         }
       } catch (err) {
-        console.warn("Supabase Offline, usando cache local.");
         const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
         loadedCompanies = saved ? JSON.parse(saved) : [];
       }
 
-      // Merge Garantido: Se as empresas globais não estiverem na lista, adiciona-as
-      // Isso garante que os dados do rhtotal sempre apareçam na primeira vez
+      // Merge Garantido: Se as empresas globais (Silva/RH) não estiverem na lista, adiciona-as
       const finalCompanies = [...loadedCompanies];
       GLOBAL_COMPANIES_DATA.forEach(global => {
         if (!finalCompanies.some(c => c.id === global.id)) {
@@ -86,7 +84,7 @@ const App: React.FC = () => {
     }
   }, [auth.isAuthenticated]);
 
-  // Persistência de Dados
+  // Persistência
   useEffect(() => {
     if (allCompanies.length > 0) {
       localStorage.setItem(STORAGE_KEYS.COMPANIES, JSON.stringify(allCompanies));
@@ -99,7 +97,7 @@ const App: React.FC = () => {
     }
   }, [activeCompanyId]);
 
-  // Filtro de visibilidade de empresas
+  // Filtro de visibilidade
   const visibleCompanies = useMemo(() => {
     if (!auth.user) return [];
     if (auth.user.role === 'admin') return allCompanies;
@@ -109,7 +107,7 @@ const App: React.FC = () => {
     return [];
   }, [allCompanies, auth.user]);
 
-  // AUTO-SELEÇÃO DE EMPRESA (Evita o "Unexpected Error")
+  // Auto-seleção para evitar telas vazias
   useEffect(() => {
     if (auth.isAuthenticated && !activeCompanyId) {
       if (auth.user?.linkedCompanyId) {
@@ -129,7 +127,6 @@ const App: React.FC = () => {
     setAuth(newState);
     localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(newState));
     
-    // Se for usuário vinculado, já ativa a empresa dele
     if (linkedCompanyId) {
       setActiveCompanyId(linkedCompanyId);
       setActiveTab('lancamento');
@@ -176,7 +173,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white font-black">
         <BrainCircuit className="w-16 h-16 text-blue-500 animate-bounce mb-6" />
-        <p className="uppercase tracking-[0.3em] text-xs opacity-50">Autenticando rhtotal@gmail.com...</p>
+        <p className="uppercase tracking-[0.3em] text-xs opacity-50">Validando Credenciais...</p>
       </div>
     );
   }
@@ -185,7 +182,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
-      {/* Sidebar - Visível para todos os usuários cadastrados */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 text-white transform transition-transform duration-300 md:translate-x-0 md:static md:block ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-full flex flex-col">
           <div className="p-8 flex items-center gap-4 border-b border-slate-800">
@@ -194,7 +190,6 @@ const App: React.FC = () => {
           </div>
 
           <nav className="flex-1 p-5 space-y-2 mt-4">
-            {/* Empresa agora visível para todos para facilitar navegação */}
             <button onClick={() => {setActiveTab('empresa'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${activeTab === 'empresa' ? 'bg-blue-600' : 'text-slate-400 hover:bg-slate-800'}`}>
               <Building2 className="w-5 h-5" /> Empresas
             </button>
@@ -205,7 +200,6 @@ const App: React.FC = () => {
               <LayoutDashboard className="w-5 h-5" /> Dashboard
             </button>
             
-            {/* Gerenciamento de Usuários apenas para Admin */}
             {auth.user?.role === 'admin' && (
               <button onClick={() => {setActiveTab('usuarios'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${activeTab === 'usuarios' ? 'bg-blue-600' : 'text-slate-400 hover:bg-slate-800'}`}>
                 <Users className="w-5 h-5" /> Usuários
@@ -217,8 +211,8 @@ const App: React.FC = () => {
             <div className="bg-slate-800/50 p-4 rounded-2xl border border-white/5 mb-4">
               <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Acesso Identificado</p>
               <p className="text-xs font-black text-slate-200 truncate">{auth.user?.name}</p>
-              <button onClick={handleLogout} className="mt-4 w-full text-[10px] text-red-400 font-black py-2 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center gap-2">
-                <LogOut className="w-3 h-3" /> SAIR
+              <button onClick={handleLogout} className="mt-4 w-full text-[10px] text-red-400 font-black py-2 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center gap-2 uppercase">
+                <LogOut className="w-3 h-3" /> Encerrar Sessão
               </button>
             </div>
             <button 
@@ -239,8 +233,8 @@ const App: React.FC = () => {
              <h2 className="text-2xl font-black text-slate-900">
                 {activeTab === 'empresa' && 'Empresas'}
                 {activeTab === 'lancamento' && 'Folha de Pagamento'}
-                {activeTab === 'dashboard' && 'Dashboard Estratégico'}
-                {activeTab === 'usuarios' && 'Gestão de Usuários'}
+                {activeTab === 'dashboard' && 'Estratégia RH'}
+                {activeTab === 'usuarios' && 'Controle de Usuários'}
              </h2>
            </div>
            <div className="hidden sm:block text-right">
@@ -276,12 +270,11 @@ const App: React.FC = () => {
             <UserManagement companies={allCompanies} />
           )}
           
-          {/* Failsafe: Se não houver empresa selecionada em abas de dados */}
           {(activeTab === 'lancamento' || activeTab === 'dashboard') && !activeCompany && (
             <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200">
                <Building2 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-               <h3 className="text-xl font-black text-slate-400">Nenhuma empresa ativa para lançamentos</h3>
-               <button onClick={() => setActiveTab('empresa')} className="mt-6 text-blue-600 font-bold hover:underline">Ir para seleção de empresas</button>
+               <h3 className="text-xl font-black text-slate-400">Selecione uma empresa para visualizar os dados</h3>
+               <button onClick={() => setActiveTab('empresa')} className="mt-6 text-blue-600 font-black hover:underline uppercase text-xs tracking-widest">Ver Lista de Empresas</button>
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 
 import { ResellerUser, CompanyData } from '../types';
+import { supabaseService } from './supabase';
 
 /**
  * LISTA DE USUÁRIOS GLOBAIS (ACESSÍVEIS DE QUALQUER DISPOSITIVO)
@@ -70,14 +71,26 @@ export const GLOBAL_COMPANIES_DATA: CompanyData[] = [
   }
 ];
 
-export const findUserByEmail = (email: string): ResellerUser | undefined => {
+/**
+ * Busca usuário de forma assíncrona: Global -> Supabase -> LocalStorage
+ */
+export const findUserByEmail = async (email: string): Promise<ResellerUser | undefined> => {
   const normalizedEmail = email.trim().toLowerCase();
   
   // 1. Procura na lista Global (Código)
   const global = GLOBAL_USERS.find(u => u.email.toLowerCase() === normalizedEmail);
   if (global) return global;
 
-  // 2. Procura na lista Local (Navegador)
+  // 2. Procura no Supabase (Nuvem) - Essencial para novos usuários criados
+  try {
+    const cloudUsers = await supabaseService.getProfiles();
+    const cloudMatch = cloudUsers.find(u => u.email.toLowerCase() === normalizedEmail);
+    if (cloudMatch) return cloudMatch;
+  } catch (e) {
+    console.warn("Falha na consulta cloud, tentando cache local.");
+  }
+
+  // 3. Procura na lista Local (Cache do Navegador)
   const savedUsersStr = localStorage.getItem('gestorpro_users_data');
   const localUsers: ResellerUser[] = savedUsersStr ? JSON.parse(savedUsersStr) : [];
   return localUsers.find(u => u.email.toLowerCase() === normalizedEmail);
