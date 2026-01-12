@@ -17,6 +17,15 @@
                 display: none !important;
             }
         }
+        .animate-shake {
+          animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        @keyframes shake {
+          10%, 90% { transform: translate3d(-1px, 0, 0); }
+          20%, 80% { transform: translate3d(2px, 0, 0); }
+          30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+          40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
     </style>
 <script type="importmap">
 {
@@ -24,6 +33,7 @@
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.39.7",
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
     "recharts": "https://esm.sh/recharts@^3.6.0",
@@ -35,7 +45,6 @@
 </head>
 <body>
     <div id="root"></div>
-    <!-- Script de entrada da aplicação -->
     <script type="module" src="index.tsx"></script>
 </body>
 </html>
