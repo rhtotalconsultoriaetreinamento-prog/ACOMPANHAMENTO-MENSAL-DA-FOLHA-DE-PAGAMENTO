@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { BrainCircuit, Lock, Mail, Loader2, AlertCircle, Eye, EyeOff, Globe, ShieldCheck } from 'lucide-react';
+import { BrainCircuit, Lock, Mail, Loader2, AlertCircle, Eye, EyeOff, Globe } from 'lucide-react';
 import { findUserByEmail } from '../services/authService';
 
 interface LoginProps {
@@ -23,17 +23,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     const cleanPassword = password.trim();
 
     try {
-      // 1. ADMIN CENTRAL
+      // 1. ADMIN CENTRAL (Failsafe)
       if (normalizedEmail === 'admin@gestorpro.com' && cleanPassword === 'admin123') {
-        onLogin('Administrador', 'admin');
+        onLogin('Administrador Master', 'admin');
         return;
       }
 
-      // 2. BUSCA DINÂMICA (Inclui Nuvem)
+      // 2. BUSCA DINÂMICA (Inclui Nuvem e Administradores Criados)
       const userMatch = await findUserByEmail(normalizedEmail);
       
       if (userMatch) {
-        const isPasswordCorrect = userMatch.password === cleanPassword || cleanPassword === 'gestor2024';
+        const isPasswordCorrect = userMatch.password === cleanPassword;
         
         if (isPasswordCorrect) {
           if (userMatch.status === 'Inativo') {
@@ -41,7 +41,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             setLoading(false);
             return;
           }
-          onLogin(userMatch.name, 'reseller', userMatch.linkedCompanyId);
+          // Agora usa a role definida no cadastro do usuário
+          onLogin(userMatch.name, userMatch.role || 'reseller', userMatch.linkedCompanyId);
         } else {
           setError('Senha incorreta.');
           setLoading(false);

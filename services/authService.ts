@@ -7,10 +7,22 @@ import { supabaseService } from './supabase';
  */
 export const GLOBAL_USERS: ResellerUser[] = [
   {
+    id: 'global-admin-1',
+    name: 'Suporte GestorPro',
+    email: 'suporte@gestorpro.com',
+    company: 'GestorPro Central',
+    role: 'admin',
+    password: 'suporte2024',
+    status: 'Ativo',
+    expirationDate: '2030-12-31',
+    mustChangePassword: false
+  },
+  {
     id: 'global-1',
     name: 'Silva Palmeiras',
     email: 'silva.palmeiras2016@gmail.com',
     company: 'Palmeiras Negócios',
+    role: 'reseller',
     password: 'gestor2024',
     status: 'Ativo',
     expirationDate: '2025-12-31',
@@ -22,6 +34,7 @@ export const GLOBAL_USERS: ResellerUser[] = [
     name: 'RH Total - Consultoria',
     email: 'rhtotal@gmail.com',
     company: 'RH Total Consultoria',
+    role: 'reseller',
     password: 'gestor2024',
     status: 'Ativo',
     expirationDate: '2026-01-01',
@@ -60,13 +73,9 @@ export const GLOBAL_COMPANIES_DATA: CompanyData[] = [
   }
 ];
 
-/**
- * Busca usuário: Prioriza Nuvem (para multi-acesso) -> Estáticos -> Local
- */
 export const findUserByEmail = async (email: string): Promise<ResellerUser | undefined> => {
   const normalizedEmail = email.trim().toLowerCase();
   
-  // 1. TENTA NUVEM (Obrigatório para multi-dispositivo)
   try {
     const cloudUsers = await supabaseService.getProfiles();
     const cloudMatch = cloudUsers.find(u => u.email.toLowerCase() === normalizedEmail);
@@ -75,11 +84,9 @@ export const findUserByEmail = async (email: string): Promise<ResellerUser | und
     console.warn("AuthService: Falha na nuvem, verificando locais...");
   }
 
-  // 2. TENTA ESTÁTICOS (Hardcoded)
   const global = GLOBAL_USERS.find(u => u.email.toLowerCase() === normalizedEmail);
   if (global) return global;
 
-  // 3. TENTA CACHE LOCAL (Apenas no PC atual)
   const savedUsersStr = localStorage.getItem('gestorpro_users_data');
   const localUsers: ResellerUser[] = savedUsersStr ? JSON.parse(savedUsersStr) : [];
   return localUsers.find(u => u.email.toLowerCase() === normalizedEmail);

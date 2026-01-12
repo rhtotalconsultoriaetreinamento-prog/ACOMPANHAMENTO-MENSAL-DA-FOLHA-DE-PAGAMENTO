@@ -24,8 +24,9 @@ export interface ResellerUser {
   name: string;
   email: string;
   company: string;
-  password?: string; // Senha do usuário
-  mustChangePassword?: boolean; // Flag para primeiro acesso
+  role: 'admin' | 'reseller'; // Nova propriedade para controle de privilégios
+  password?: string;
+  mustChangePassword?: boolean;
   linkedCompanyId?: string; 
   status: 'Ativo' | 'Inativo';
   expirationDate: string;

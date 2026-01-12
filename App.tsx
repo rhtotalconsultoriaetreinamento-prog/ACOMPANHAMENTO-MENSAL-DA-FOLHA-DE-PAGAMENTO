@@ -17,12 +17,9 @@ import {
   X,
   Users,
   Building2,
-  Cloud,
   RefreshCw,
-  Globe,
-  Database,
-  ShieldCheck,
-  LogOut
+  LogOut,
+  Database
 } from 'lucide-react';
 
 const STORAGE_KEYS = {
@@ -46,26 +43,28 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [usingCloud, setUsingCloud] = useState(false);
 
-  // Carregar dados iniciais com merge de dados globais
   useEffect(() => {
     const loadData = async () => {
       let loadedCompanies: CompanyData[] = [];
+      let fromCloud = false;
       
       try {
         const cloudData = await supabaseService.getCompanies();
         if (cloudData && cloudData.length > 0) {
           loadedCompanies = cloudData;
+          fromCloud = true;
         } else {
           const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
           loadedCompanies = saved ? JSON.parse(saved) : [];
         }
       } catch (err) {
+        console.warn("Falha ao acessar nuvem, carregando local...");
         const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
         loadedCompanies = saved ? JSON.parse(saved) : [];
       }
 
-      // Merge Garantido: Se as empresas globais (Silva/RH) não estiverem na lista, adiciona-as
       const finalCompanies = [...loadedCompanies];
       GLOBAL_COMPANIES_DATA.forEach(global => {
         if (!finalCompanies.some(c => c.id === global.id)) {
@@ -74,6 +73,7 @@ const App: React.FC = () => {
       });
 
       setAllCompanies(finalCompanies);
+      setUsingCloud(fromCloud);
       setIsLoading(false);
     };
 
@@ -84,7 +84,6 @@ const App: React.FC = () => {
     }
   }, [auth.isAuthenticated]);
 
-  // Persistência
   useEffect(() => {
     if (allCompanies.length > 0) {
       localStorage.setItem(STORAGE_KEYS.COMPANIES, JSON.stringify(allCompanies));
@@ -97,7 +96,6 @@ const App: React.FC = () => {
     }
   }, [activeCompanyId]);
 
-  // Filtro de visibilidade
   const visibleCompanies = useMemo(() => {
     if (!auth.user) return [];
     if (auth.user.role === 'admin') return allCompanies;
@@ -107,7 +105,6 @@ const App: React.FC = () => {
     return [];
   }, [allCompanies, auth.user]);
 
-  // Auto-seleção para evitar telas vazias
   useEffect(() => {
     if (auth.isAuthenticated && !activeCompanyId) {
       if (auth.user?.linkedCompanyId) {
@@ -136,22 +133,30 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem(STORAGE_KEYS.AUTH);
-    localStorage.removeItem(STORAGE_KEYS.ACTIVE_ID);
-    localStorage.removeItem(STORAGE_KEYS.TAB);
-    window.location.href = window.location.origin;
+    localStorage.clear();
+    window.location.reload();
   };
 
   const handleUpdatePayroll = async (entries: PayrollData[]) => {
     if (!activeCompanyId) return;
+
+    const currentEntries = activeCompany?.payrollEntries || [];
+    
+    if (entries.length < currentEntries.length) {
+      const deleted = currentEntries.find(ce => !entries.some(e => e.id === ce.id));
+      if (deleted) {
+        try { await supabaseService.deletePayrollEntry(deleted.id); } catch(e){}
+      }
+    } else {
+      const lastEntry = entries[entries.length - 1];
+      if (lastEntry) {
+        try { await supabaseService.savePayrollEntry(activeCompanyId, lastEntry); } catch(e){}
+      }
+    }
+
     setAllCompanies(prev => prev.map(c => 
       c.id === activeCompanyId ? { ...c, payrollEntries: entries } : c
     ));
-    
-    try {
-      const entry = entries[entries.length - 1];
-      if (entry) await supabaseService.savePayrollEntry(activeCompanyId, entry);
-    } catch(e){}
   };
 
   const handleGenerateAnalysis = async () => {
@@ -173,7 +178,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white font-black">
         <BrainCircuit className="w-16 h-16 text-blue-500 animate-bounce mb-6" />
-        <p className="uppercase tracking-[0.3em] text-xs opacity-50">Validando Credenciais...</p>
+        <p className="uppercase tracking-[0.3em] text-xs opacity-50 text-center">Iniciando Sincronização Global...</p>
       </div>
     );
   }
@@ -208,11 +213,14 @@ const App: React.FC = () => {
           </nav>
 
           <div className="p-6 border-t border-slate-800">
-            <div className="bg-slate-800/50 p-4 rounded-2xl border border-white/5 mb-4">
-              <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Acesso Identificado</p>
+            <div className="bg-slate-800/50 p-4 rounded-2xl border border-white/5 mb-4 text-center">
+              <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${usingCloud ? 'text-blue-400' : 'text-amber-500'}`}>
+                <Database className="w-3 h-3 inline mr-1" />
+                {usingCloud ? 'Nuvem Ativa' : 'Modo Offline'}
+              </p>
               <p className="text-xs font-black text-slate-200 truncate">{auth.user?.name}</p>
               <button onClick={handleLogout} className="mt-4 w-full text-[10px] text-red-400 font-black py-2 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center gap-2 uppercase">
-                <LogOut className="w-3 h-3" /> Encerrar Sessão
+                <LogOut className="w-3 h-3" /> Sair
               </button>
             </div>
             <button 
@@ -238,8 +246,8 @@ const App: React.FC = () => {
              </h2>
            </div>
            <div className="hidden sm:block text-right">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Empresa Ativa</p>
-              <p className="text-sm font-black text-slate-800">{activeCompany?.name || 'Selecione uma empresa'}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidade Global</p>
+              <p className="text-sm font-black text-slate-800 truncate max-w-[200px]">{activeCompany?.name || 'Selecione uma empresa'}</p>
            </div>
         </header>
 
@@ -248,15 +256,27 @@ const App: React.FC = () => {
             <CompanyForm 
               companies={visibleCompanies} 
               activeCompanyId={activeCompanyId} 
-              onSave={(data) => {
-                setAllCompanies(prev => [...prev, data]);
-                setActiveCompanyId(data.id);
-                setActiveTab('lancamento');
+              onSave={async (data) => {
+                try {
+                  await supabaseService.saveCompany(data);
+                  setAllCompanies(prev => [...prev, data]);
+                  setActiveCompanyId(data.id);
+                  setActiveTab('lancamento');
+                } catch (err) {
+                  alert("Empresa salva localmente. Sincronize o banco de dados no Supabase para salvar na nuvem.");
+                  setAllCompanies(prev => [...prev, data]);
+                  setActiveCompanyId(data.id);
+                }
               }} 
               onSelect={(id) => {setActiveCompanyId(id); setActiveTab('lancamento');}} 
-              onDelete={(id) => {
-                setAllCompanies(prev => prev.filter(c => c.id !== id));
-                if (activeCompanyId === id) setActiveCompanyId(null);
+              onDelete={async (id) => {
+                if (window.confirm('Excluir empresa?')) {
+                  try {
+                    await supabaseService.deleteCompany(id);
+                  } catch (err) {}
+                  setAllCompanies(prev => prev.filter(c => c.id !== id));
+                  if (activeCompanyId === id) setActiveCompanyId(null);
+                }
               }} 
             />
           )}
@@ -273,8 +293,8 @@ const App: React.FC = () => {
           {(activeTab === 'lancamento' || activeTab === 'dashboard') && !activeCompany && (
             <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200">
                <Building2 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-               <h3 className="text-xl font-black text-slate-400">Selecione uma empresa para visualizar os dados</h3>
-               <button onClick={() => setActiveTab('empresa')} className="mt-6 text-blue-600 font-black hover:underline uppercase text-xs tracking-widest">Ver Lista de Empresas</button>
+               <h3 className="text-xl font-black text-slate-400">Selecione uma empresa</h3>
+               <button onClick={() => setActiveTab('empresa')} className="mt-6 text-blue-600 font-black hover:underline uppercase text-xs tracking-widest">Ver Painel de Empresas</button>
             </div>
           )}
         </div>

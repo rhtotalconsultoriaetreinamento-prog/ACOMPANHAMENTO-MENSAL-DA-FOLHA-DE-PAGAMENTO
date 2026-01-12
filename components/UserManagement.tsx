@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ResellerUser, CompanyData } from '../types';
-import { Users, UserPlus, Trash2, Edit3, Search, X, Lock, Eye, EyeOff, RefreshCw, Cloud, CheckCircle, Globe, AlertCircle } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit3, Search, X, Lock, Eye, EyeOff, RefreshCw, Cloud, CheckCircle, Globe, ShieldAlert } from 'lucide-react';
 import { supabaseService } from '../services/supabase';
 import { GLOBAL_USERS } from '../services/authService';
 
@@ -22,6 +22,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
     name: '',
     email: '',
     company: '',
+    role: 'reseller',
     password: '',
     linkedCompanyId: '',
     status: 'Ativo',
@@ -31,10 +32,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
   const loadUsers = async () => {
     setIsLoading(true);
     try {
-      // Prioridade total ao Servidor Global
       const cloudUsers = await supabaseService.getProfiles();
       
-      // Merge com os usuários estáticos (Silva/RH Total)
       const combined = [...cloudUsers];
       GLOBAL_USERS.forEach(gu => {
         if (!combined.some(c => c.email.toLowerCase() === gu.email.toLowerCase())) {
@@ -43,7 +42,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
       });
       
       setUsers(combined);
-      // Atualiza cache local apenas para visualização offline
       localStorage.setItem('gestorpro_users_data', JSON.stringify(combined));
     } catch (e) {
       console.error("Falha ao sincronizar com servidor global:", e);
@@ -58,12 +56,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
 
   const handleSave = async () => {
     if (!formData.name || !formData.email || (!editingUserId && !formData.password)) {
-      alert('Preencha os campos obrigatórios (Nome, E-mail e Senha).');
-      return;
-    }
-
-    if (!supabaseService.isConnected()) {
-      alert('ERRO DE CONEXÃO: O Servidor Global não está acessível. Para que o usuário funcione em qualquer computador, você precisa estar online e com o banco de dados configurado.');
+      alert('Preencha os campos obrigatórios.');
       return;
     }
 
@@ -73,32 +66,29 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
     const targetUser: ResellerUser = {
       ...formData,
       id: editingUserId || Math.random().toString(36).substr(2, 9),
-      company: selectedCompany?.name || (formData.linkedCompanyId === '' ? 'Acesso Total' : formData.company),
+      company: formData.role === 'admin' ? 'Administração Central' : (selectedCompany?.name || 'Gestor Externo'),
       mustChangePassword: false
     };
 
     try {
-      // SALVAMENTO OBRIGATÓRIO NA NUVEM
       await supabaseService.saveProfile(targetUser);
-      
-      await loadUsers(); // Recarrega da nuvem para garantir
+      await loadUsers();
       setShowModal(false);
-      alert(`SUCESSO! O usuário ${targetUser.name} agora é um USUÁRIO GLOBAL e pode acessar de qualquer computador.`);
+      alert(`O usuário ${targetUser.name} foi configurado como ${targetUser.role === 'admin' ? 'ADMINISTRADOR' : 'GESTOR'}.`);
     } catch (e) {
-      console.error(e);
-      alert('FALHA NA SINCRONIZAÇÃO: Não foi possível salvar no servidor global. O usuário NÃO foi criado para garantir a integridade do sistema multi-dispositivo.');
+      alert('FALHA NA SINCRONIZAÇÃO NUVEM.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const deleteUser = async (id: string) => {
-    if (window.confirm('Excluir usuário do Servidor Global? Ele perderá acesso em todos os dispositivos.')) {
+    if (window.confirm('Excluir acesso global permanentemente?')) {
       try { 
         await supabaseService.deleteProfile(id); 
         setUsers(users.filter(u => u.id !== id));
       } catch (e) {
-        alert('Erro ao excluir na nuvem.');
+        alert('Erro ao excluir.');
       }
     }
   };
@@ -128,62 +118,49 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
         </div>
         
         <button 
-          onClick={() => { setEditingUserId(null); setFormData({name: '', email: '', company: '', password: '', linkedCompanyId: '', status: 'Ativo', expirationDate: ''}); setShowModal(true); }}
+          onClick={() => { setEditingUserId(null); setFormData({name: '', email: '', company: '', role: 'reseller', password: '', linkedCompanyId: '', status: 'Ativo', expirationDate: ''}); setShowModal(true); }}
           className="bg-slate-900 hover:bg-black text-white font-black px-8 py-4 rounded-2xl flex items-center gap-3 shadow-xl transition-all active:scale-95"
         >
-          <UserPlus className="w-5 h-5" /> CADASTRAR ACESSO GLOBAL
+          <UserPlus className="w-5 h-5" /> CRIAR NOVO ACESSO
         </button>
       </div>
 
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden">
-        <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-           <div className="flex items-center gap-3">
-             <Globe className={`w-5 h-5 ${supabaseService.isConnected() ? 'text-emerald-500' : 'text-red-500'}`} />
-             <p className="text-xs font-black text-slate-600 uppercase tracking-widest">
-               Status do Servidor: {supabaseService.isConnected() ? 'CONECTADO (Sincronização Ativa)' : 'DESCONECTADO'}
-             </p>
-           </div>
-           <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase">
-             {users.length} Usuários Identificados
-           </span>
-        </div>
-        
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em]">
-                <th className="px-8 py-5">Identificação</th>
-                <th className="px-8 py-5">Tipo de Acesso</th>
-                <th className="px-8 py-5">Modo de Sincronia</th>
+                <th className="px-8 py-5">Nome</th>
+                <th className="px-8 py-5">Função</th>
+                <th className="px-8 py-5">Vínculo</th>
                 <th className="px-8 py-5">Status</th>
-                <th className="px-8 py-5 text-right">Gestão</th>
+                <th className="px-8 py-5 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.map(user => (
                 <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
                   <td className="px-8 py-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all text-xl">
-                        {user.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="font-black text-slate-900 text-base">{user.name}</p>
-                        <p className="text-xs text-slate-400 font-bold">{user.email}</p>
-                      </div>
+                    <div>
+                      <p className="font-black text-slate-900">{user.name}</p>
+                      <p className="text-xs text-slate-400 font-bold">{user.email}</p>
                     </div>
                   </td>
                   <td className="px-8 py-6">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-black text-blue-600 uppercase tracking-wider">{user.company}</span>
-                      <span className="text-[10px] text-slate-400 font-bold">Empresa Vinculada</span>
+                    <div className="flex items-center gap-2">
+                      {user.role === 'admin' ? (
+                        <span className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest">
+                          <ShieldAlert className="w-3 h-3" /> Administrador
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                          Gestor / Operação
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-8 py-6">
-                    <div className="flex items-center gap-2 text-emerald-600">
-                      <Cloud className="w-4 h-4" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Global / Cloud</span>
-                    </div>
+                    <span className="text-xs font-black text-slate-600 uppercase truncate max-w-[150px] block">{user.company}</span>
                   </td>
                   <td className="px-8 py-6">
                     <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${user.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
@@ -205,14 +182,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
           <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl overflow-hidden border border-white/20">
             <div className="p-10 bg-slate-900 text-white flex justify-between items-center relative">
-              <div className="absolute top-0 right-0 p-8 opacity-5">
-                <Globe className="w-32 h-32" />
-              </div>
               <div className="relative z-10">
-                <h3 className="font-black text-2xl uppercase tracking-tight">{editingUserId ? 'Editar' : 'Novo'} Acesso Global</h3>
-                <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
-                  <Cloud className="w-3 h-3" /> Sincronização em Tempo Real Ativa
-                </p>
+                <h3 className="font-black text-2xl uppercase tracking-tight">{editingUserId ? 'Editar' : 'Novo'} Usuário</h3>
+                <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mt-2">Defina permissões e acessos globais</p>
               </div>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors relative z-10"><X className="w-8 h-8" /></button>
             </div>
@@ -220,58 +192,60 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
             <div className="p-10 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Completo</label>
-                  <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nome do Gestor" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none" />
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nível de Acesso</label>
+                  <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-blue-600 focus:ring-2 focus:ring-blue-600 outline-none">
+                    <option value="reseller">GESTOR (Acesso Limitado)</option>
+                    <option value="admin">ADMINISTRADOR (Acesso Total)</option>
+                  </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail de Acesso</label>
-                  <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="exemplo@email.com" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none" />
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status</label>
+                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none">
+                    <option value="Ativo">ATIVO</option>
+                    <option value="Inativo">INATIVO</option>
+                  </select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Completo</label>
+                <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none" />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Definir Senha</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
+                  <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
                   <div className="relative">
-                    <input type={showPassword ? "text" : "password"} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="••••••••" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none" />
+                    <input type={showPassword ? "text" : "password"} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none" />
                     <button onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600">
                       {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Empresa Alvo</label>
-                  <select value={formData.linkedCompanyId} onChange={e => setFormData({...formData, linkedCompanyId: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none cursor-pointer appearance-none">
-                    <option value="">ACESSO TOTAL (Administrador)</option>
-                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status da Conta</label>
-                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none">
-                    <option value="Ativo">ATIVO</option>
-                    <option value="Inativo">INATIVO</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data de Expiração</label>
-                  <input type="date" value={formData.expirationDate} onChange={e => setFormData({...formData, expirationDate: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none" />
-                </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vincular a Empresa (Opcional para Admin)</label>
+                <select value={formData.linkedCompanyId} onChange={e => setFormData({...formData, linkedCompanyId: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none">
+                  <option value="">NENHUMA / ACESSO TOTAL</option>
+                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
               </div>
             </div>
 
-            <div className="p-10 bg-slate-50 border-t flex flex-col sm:flex-row gap-4">
-              <button onClick={() => setShowModal(false)} className="flex-1 py-5 text-xs font-black uppercase text-slate-400 hover:text-slate-600 transition-colors">Cancelar Operação</button>
+            <div className="p-10 bg-slate-50 border-t flex gap-4">
+              <button onClick={() => setShowModal(false)} className="flex-1 py-5 text-xs font-black uppercase text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
               <button 
                 onClick={handleSave} 
                 disabled={isSaving}
-                className="flex-[2] py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50"
+                className="flex-[2] py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
               >
                 {isSaving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                {editingUserId ? 'Confirmar Alterações' : 'Criar Acesso Global Agora'}
+                {editingUserId ? 'Salvar Alterações' : 'Criar Acesso'}
               </button>
             </div>
           </div>
