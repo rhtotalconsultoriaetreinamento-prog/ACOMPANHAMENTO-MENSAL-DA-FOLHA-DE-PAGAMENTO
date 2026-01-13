@@ -3,71 +3,63 @@ import { GoogleGenAI } from "@google/genai";
 import { PayrollData, CompanyData } from "../types";
 
 const SYSTEM_INSTRUCTION = `
-Você é um assistente especialista em Folha de Pagamento, Gestão de RH e Análise Gerencial Estratégica.
-O usuário fornecerá dados detalhados por tipo de vínculo: Efetivos, Contratados e Comissionados de uma empresa específica.
-
-SUA FUNÇÃO: Análise Profunda Vinculada ao Perfil da Empresa
-1. Analisar os custos considerando o nome e contexto (CNPJ) fornecido.
-2. Calcular custo médio por colaborador GERAL e por CATEGORIA.
-3. Analisar o Mix de Vínculos: Quem custa mais proporcionalmente? Onde está o maior peso da folha?
-4. Evolução e Tendências: Comparar o crescimento dos custos vs. crescimento do headcount entre os meses.
-5. Sugerir otimizações personalizadas para o contexto gerencial da empresa em questão.
-
-FORMATO DA RESPOSTA (Markdown Profissional)
-- # Análise Estratégica: [Nome da Empresa]
-- Resumo Executivo Financeiro.
-- Análise de Eficiência por Vínculo (Custo Médio Segmentado).
-- Evolução e Tendência da Folha.
-- Conclusão Gerencial Estratégica (Insights de ROI e sugestões de gestão).
-
-REGRAS:
-- Linguagem executiva, clara e focada em resultados.
-- Não invente dados.
-- Refira-se à empresa pelo nome quando apropriado para gerar proximidade gerencial.
+Você é um assistente especialista em Folha de Pagamento, Gestão de RH e Análise Gerencial.
+Sua tarefa é analisar os dados de custos e headcount fornecidos e gerar um relatório estratégico para a diretoria.
+Identifique tendências, anomalias, oportunidades de otimização de custos e eficiência operacional.
+Fale diretamente sobre a empresa mencionada.
+Use um tom executivo, objetivo e baseado em dados.
+Aponte variações significativas entre os meses e sugira ações práticas como:
+- Alinhamento de turnover.
+- Impacto de encargos e provisões.
+- Proporção entre CLT e contratos externos (PJ/Comissões).
+- Tendências de aumento de custo per capita.
 `;
 
 export const analyzePayroll = async (data: PayrollData[], company: CompanyData): Promise<string> => {
-  const apiKey = process.env.API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("O servidor de IA está indisponível (Chave de API não configurada).");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-  
-  const formattedData = data.map(d => 
-    `Mês/Ano: ${d.monthYear}
-    - Efetivos: ${d.effectiveCount} colab. | Custo: R$ ${d.effectiveValue.toLocaleString('pt-BR')}
-    - Contratados: ${d.contractedCount} colab. | Custo: R$ ${d.contractedValue.toLocaleString('pt-BR')}
-    - Comissionados: ${d.commissionedCount} colab. | Custo: R$ ${d.commissionedValue.toLocaleString('pt-BR')}
-    - TOTAL: R$ ${d.totalValue.toLocaleString('pt-BR')}`
-  ).join('\n\n');
-
-  const prompt = `
-  EMPRESA: ${company.name}
-  CNPJ: ${company.cnpj}
-
-  DADOS HISTÓRICOS:
-  ${formattedData}
-  
-  Por favor, realize a análise gerencial para esta empresa específica.`;
-
   try {
+    // Inicialização utilizando a variável de ambiente process.env.API_KEY conforme diretriz
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    // Formatação rica dos dados para o prompt
+    const formattedData = data.map(d => 
+      `Competência: ${d.monthYear} | Custo Total: R$ ${d.totalValue.toLocaleString('pt-BR')} | Efetivos: ${d.effectiveCount} (Custo: R$ ${d.effectiveValue.toLocaleString('pt-BR')}) | PJ: ${d.contractedCount} (Custo: R$ ${d.contractedValue.toLocaleString('pt-BR')}) | Comissionados: ${d.commissionedCount} (Custo: R$ ${d.commissionedValue.toLocaleString('pt-BR')})`
+    ).join('\n');
+
+    const prompt = `
+      EMPRESA: ${company.name}
+      CNPJ: ${company.cnpj}
+      
+      DADOS HISTÓRICOS PARA ANÁLISE:
+      ${formattedData}
+      
+      POR FAVOR, ELABORE UMA ANÁLISE ESTRATÉGICA DETALHADA EM FORMATO MARKDOWN.
+    `;
+
+    // Utilizando o modelo Gemini 3 Pro para análise de alta qualidade
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.2,
+        temperature: 0.6,
+        thinkingConfig: { thinkingBudget: 2000 } // Permite que o modelo realize raciocínio complexo
       },
     });
 
-    return response.text || "Não foi possível gerar a análise no momento.";
+    return response.text || "A IA processou os dados, mas não retornou um relatório válido. Tente novamente.";
   } catch (error: any) {
-    console.error("Error generating analysis:", error);
-    if (error.message?.includes('API Key')) {
-        throw new Error("Erro de Protocolo: A chave de IA não foi reconhecida pelo navegador.");
+    console.error("Erro na análise Gemini:", error);
+    
+    // Mensagem amigável para erro de API Key
+    if (error.message?.toLowerCase().includes('api key') || error.message?.toLowerCase().includes('api_key')) {
+      return "⚠️ Configuração Pendente: A chave de acesso à IA não foi localizada ou não está ativa no projeto.";
     }
-    throw new Error("Falha na comunicação com o especialista de IA.");
+
+    // Erro de Cota
+    if (error.message?.includes('429') || error.message?.includes('quota')) {
+      return "⚠️ Limite de Uso: O volume de requisições de IA foi excedido. Por favor, aguarde um minuto e tente novamente.";
+    }
+
+    throw new Error(`Erro técnico na IA: ${error.message}`);
   }
 };

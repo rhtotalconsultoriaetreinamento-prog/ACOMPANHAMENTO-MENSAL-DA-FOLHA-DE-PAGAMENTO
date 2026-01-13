@@ -41,6 +41,7 @@ export const supabaseService = {
     try {
       const { data, error } = await supabase.from('companies').select('*, payroll_entries(*)');
       if (error) throw error;
+      
       return (data || []).map((c: any) => ({
         id: c.id,
         name: c.name,
@@ -49,13 +50,13 @@ export const supabaseService = {
         payrollEntries: (c.payroll_entries || []).map((e: any) => ({
           id: e.id,
           monthYear: e.month_year,
-          total_value: e.total_value,
-          effective_count: e.effective_count,
-          effective_value: e.effective_value,
-          contracted_count: e.contracted_count,
-          contracted_value: e.contracted_value,
-          commissioned_count: e.commissioned_count,
-          commissioned_value: e.commissioned_value
+          totalValue: Number(e.total_value) || 0,
+          effectiveCount: Number(e.effective_count) || 0,
+          effectiveValue: Number(e.effective_value) || 0,
+          contractedCount: Number(e.contracted_count) || 0,
+          contractedValue: Number(e.contracted_value) || 0,
+          commissionedCount: Number(e.commissioned_count) || 0,
+          commissionedValue: Number(e.commissioned_value) || 0
         }))
       })) as CompanyData[];
     } catch (e: any) {

@@ -19,7 +19,6 @@ import {
   LogOut,
   Database,
   CloudOff,
-  AlertTriangle,
   ServerCrash
 } from 'lucide-react';
 
@@ -46,23 +45,26 @@ const App: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   const [cloudStatus, setCloudStatus] = useState<'connecting' | 'connected' | 'error' | 'local'>('connecting');
-  const [cloudMessage, setCloudMessage] = useState('');
 
   const loadData = async () => {
     setCloudStatus('connecting');
-    const connection = await supabaseService.testConnection();
-    
-    if (connection.success) {
-      setCloudStatus('connected');
-      const cloudData = await supabaseService.getCompanies();
-      setAllCompanies(cloudData);
-    } else {
-      setCloudStatus(connection.message.includes('Tabela') ? 'error' : 'local');
-      setCloudMessage(connection.message);
-      const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
-      setAllCompanies(saved ? JSON.parse(saved) : []);
+    try {
+      const connection = await supabaseService.testConnection();
+      
+      if (connection.success) {
+        setCloudStatus('connected');
+        const cloudData = await supabaseService.getCompanies();
+        setAllCompanies(cloudData);
+      } else {
+        setCloudStatus('local');
+        const saved = localStorage.getItem(STORAGE_KEYS.COMPANIES);
+        setAllCompanies(saved ? JSON.parse(saved) : []);
+      }
+    } catch (e) {
+      setCloudStatus('error');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -133,10 +135,9 @@ const App: React.FC = () => {
       c.id === activeCompanyId ? { ...c, payrollEntries: entries } : c
     ));
 
-    // Persistência na nuvem para o último lançamento
     if (entries.length > 0) {
-        const lastEntry = entries[entries.length - 1];
-        try { await supabaseService.savePayrollEntry(activeCompanyId, lastEntry); } catch(e){}
+      const lastEntry = entries[entries.length - 1];
+      try { await supabaseService.savePayrollEntry(activeCompanyId, lastEntry); } catch(e){}
     }
   };
 
@@ -144,7 +145,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white font-black">
         <BrainCircuit className="w-16 h-16 text-blue-500 animate-bounce mb-6" />
-        <p className="uppercase tracking-[0.3em] text-[10px] opacity-50 text-center">Iniciando protocolo de nuvem...</p>
+        <p className="uppercase tracking-[0.3em] text-[10px] opacity-50 text-center">Sincronizando Nuvem...</p>
       </div>
     );
   }
@@ -178,9 +179,9 @@ const App: React.FC = () => {
           </nav>
 
           <div className="p-6 border-t border-slate-800">
-            <div className={`p-4 rounded-2xl border mb-4 text-center transition-all ${
+            <div className={`p-4 rounded-2xl border mb-4 text-center ${
               cloudStatus === 'connected' ? 'bg-blue-500/10 border-blue-500/30' : 
-              cloudStatus === 'error' ? 'bg-red-500/10 border-red-500/30 animate-shake' : 
+              cloudStatus === 'error' ? 'bg-red-500/10 border-red-500/30' : 
               'bg-amber-500/10 border-amber-500/30'
             }`}>
               <p className={`text-[10px] font-black uppercase tracking-widest mb-1 flex items-center justify-center gap-2 ${
@@ -188,19 +189,14 @@ const App: React.FC = () => {
                 cloudStatus === 'error' ? 'text-red-400' : 
                 'text-amber-500'
               }`}>
-                {cloudStatus === 'connected' ? <Database className="w-3 h-3" /> : 
-                 cloudStatus === 'error' ? <ServerCrash className="w-3 h-3" /> : <CloudOff className="w-3 h-3" />}
-                {cloudStatus === 'connected' ? 'Sincronizado' : 
-                 cloudStatus === 'error' ? 'Erro de Banco' : 'Modo Offline'}
+                {cloudStatus === 'connected' ? <Database className="w-3 h-3" /> : <CloudOff className="w-3 h-3" />}
+                {cloudStatus === 'connected' ? 'Nuvem Ativa' : 'Banco Offline'}
               </p>
               <p className="text-xs font-black text-slate-200 truncate">{auth.user?.name}</p>
               <button onClick={handleLogout} className="mt-4 w-full text-[10px] text-red-400 font-black py-2 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center gap-2 uppercase">
                 <LogOut className="w-3 h-3" /> Sair
               </button>
             </div>
-            <button onClick={loadData} className="w-full text-[9px] font-black text-slate-500 hover:text-white uppercase flex items-center justify-center gap-2 mb-4">
-              <RefreshCw className="w-3 h-3" /> Forçar Sincronização
-            </button>
           </div>
         </div>
       </aside>
@@ -216,6 +212,7 @@ const App: React.FC = () => {
                 {activeTab === 'usuarios' && 'Controle de Usuários'}
              </h2>
            </div>
+           <button onClick={loadData} className="p-2 text-slate-400 hover:text-blue-600 transition-all"><RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} /></button>
         </header>
 
         <div className="p-6 md:p-12 max-w-7xl mx-auto">
@@ -224,17 +221,13 @@ const App: React.FC = () => {
               companies={visibleCompanies} 
               activeCompanyId={activeCompanyId} 
               onSave={async (data) => {
-                try {
-                  await supabaseService.saveCompany(data);
-                  setAllCompanies(prev => [...prev, data]);
-                } catch (err: any) {
-                  alert(err.message);
-                }
+                await supabaseService.saveCompany(data);
+                setAllCompanies(prev => [...prev, data]);
               }} 
               onSelect={(id) => {setActiveCompanyId(id); setActiveTab('lancamento');}} 
               onDelete={async (id) => {
-                if (window.confirm('Excluir empresa permanentemente?')) {
-                  try { await supabaseService.deleteProfile(id); } catch (err) {}
+                if (window.confirm('Excluir empresa?')) {
+                  await supabaseService.deleteProfile(id); // Supabase service logic
                   setAllCompanies(prev => prev.filter(c => c.id !== id));
                 }
               }} 
