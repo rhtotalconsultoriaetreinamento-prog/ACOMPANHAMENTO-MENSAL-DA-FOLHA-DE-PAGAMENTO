@@ -138,13 +138,38 @@ const App: React.FC = () => {
   const handleUpdatePayroll = async (entries: PayrollData[]) => {
     if (!activeCompanyId) return;
     
+    // Identifica se houve adição ou edição baseada no histórico local
+    const currentEntries = activeCompany?.payrollEntries || [];
+    const changedEntry = entries.find(e => {
+      const existing = currentEntries.find(ce => ce.id === e.id);
+      return !existing || JSON.stringify(existing) !== JSON.stringify(e);
+    });
+
     setAllCompanies(prev => prev.map(c => 
       c.id === activeCompanyId ? { ...c, payrollEntries: entries } : c
     ));
 
-    if (entries.length > 0) {
-      const lastEntry = entries[entries.length - 1];
-      try { await supabaseService.savePayrollEntry(activeCompanyId, lastEntry); } catch(e){}
+    if (changedEntry) {
+      try { 
+        await supabaseService.savePayrollEntry(activeCompanyId, changedEntry); 
+      } catch(e) {
+        console.error("Erro ao salvar no banco:", e);
+      }
+    }
+  };
+
+  const handleDeletePayrollEntry = async (entryId: string) => {
+    if (!activeCompanyId) return;
+    
+    try {
+      await supabaseService.deletePayrollEntry(entryId);
+      setAllCompanies(prev => prev.map(c => 
+        c.id === activeCompanyId 
+          ? { ...c, payrollEntries: c.payrollEntries.filter(e => e.id !== entryId) } 
+          : c
+      ));
+    } catch (e) {
+      alert("Erro ao excluir lançamento na nuvem.");
     }
   };
 
@@ -252,15 +277,25 @@ const App: React.FC = () => {
               }} 
               onSelect={(id) => {setActiveCompanyId(id); setActiveTab('lancamento');}} 
               onDelete={async (id) => {
-                if (window.confirm('Excluir empresa?')) {
-                  await supabaseService.deleteProfile(id); // Supabase service logic
-                  setAllCompanies(prev => prev.filter(c => c.id !== id));
+                if (window.confirm('Excluir empresa permanentemente da nuvem?')) {
+                  try {
+                    await supabaseService.deleteCompany(id);
+                    setAllCompanies(prev => prev.filter(c => c.id !== id));
+                    if (activeCompanyId === id) setActiveCompanyId(null);
+                  } catch (e) {
+                    alert("Erro ao excluir empresa.");
+                  }
                 }
               }} 
             />
           )}
           {activeTab === 'lancamento' && activeCompany && (
-            <DataForm onDataChange={handleUpdatePayroll} data={activeCompany.payrollEntries} activeCompany={activeCompany} />
+            <DataForm 
+              onDataChange={handleUpdatePayroll} 
+              onDeleteEntry={handleDeletePayrollEntry}
+              data={activeCompany.payrollEntries} 
+              activeCompany={activeCompany} 
+            />
           )}
           {activeTab === 'dashboard' && activeCompany && (
             <AnalysisView data={activeCompany.payrollEntries} analysis={analysis} isGenerating={isGenerating} error={error} activeCompany={activeCompany} />

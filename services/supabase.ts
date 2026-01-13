@@ -79,6 +79,17 @@ export const supabaseService = {
     }
   },
 
+  async deleteCompany(id: string) {
+    if (!supabase) return;
+    // Primeiro removemos os lançamentos vinculados (se não houver cascade no banco)
+    await supabase.from('payroll_entries').delete().eq('company_id', id);
+    const { error } = await supabase.from('companies').delete().eq('id', id);
+    if (error) {
+      console.error("Erro ao excluir empresa no Supabase:", error.message);
+      throw error;
+    }
+  },
+
   async savePayrollEntry(companyId: string, entry: PayrollData) {
     if (!supabase) return;
     const { error } = await supabase.from('payroll_entries').upsert({
@@ -99,7 +110,10 @@ export const supabaseService = {
   async deletePayrollEntry(id: string) {
     if (!supabase) return;
     const { error } = await supabase.from('payroll_entries').delete().eq('id', id);
-    if (error) throw error;
+    if (error) {
+      console.error("Erro ao excluir lançamento no Supabase:", error.message);
+      throw error;
+    }
   },
 
   async getProfiles() {
