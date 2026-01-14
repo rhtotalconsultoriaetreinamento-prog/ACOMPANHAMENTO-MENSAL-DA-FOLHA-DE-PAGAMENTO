@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { PayrollData, CompanyData } from '../types';
-import { FileText, TrendingUp, AlertCircle, Loader2, ArrowRightLeft, BrainCircuit, Users, DollarSign, Image as ImageIcon, FileDown, Building2, Sparkles, RefreshCw, Table as TableIcon, ArrowUpRight, ArrowDownRight, ArrowUp, ArrowDown } from 'lucide-react';
+import { FileText, TrendingUp, AlertCircle, Loader2, ArrowRightLeft, BrainCircuit, Users, DollarSign, Image as ImageIcon, FileDown, Building2, Sparkles, RefreshCw, Table as TableIcon, ArrowUpRight, ArrowDownRight, ArrowUp, ArrowDown, X } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -23,7 +23,6 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
   const [monthBId, setMonthBId] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
 
-  // Ordenação cronológica para a planilha
   const sortedData = useMemo(() => {
     const monthOrder: { [key: string]: number } = {
       'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4, 'Maio': 5, 'Junho': 6,
@@ -40,7 +39,6 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
     });
   }, [data]);
 
-  // Cálculos de Totais para a Planilha
   const grandTotals = useMemo(() => {
     return sortedData.reduce((acc, curr) => {
       const count = (curr.effectiveCount || 0) + (curr.contractedCount || 0) + (curr.commissionedCount || 0);
@@ -63,7 +61,6 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
   const monthA = data.find(d => d.id === monthAId);
   const monthB = data.find(d => d.id === monthBId);
 
-  // Totais para a tabela de Detalhamento Operacional
   const operationalTotals = useMemo(() => {
     if (!monthA || !monthB) return null;
     
@@ -86,35 +83,93 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
     if (!dashboardRef.current) return;
     setIsExporting(true);
     try {
-      const canvas = await html2canvas(dashboardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const canvas = await html2canvas(dashboardRef.current, { 
+        scale: 2, 
+        useCORS: true, 
+        backgroundColor: '#ffffff',
+        ignoreElements: (el) => el.classList.contains('no-print'),
+        onclone: (clonedDoc) => {
+          const headers = clonedDoc.querySelectorAll('header');
+          headers.forEach(h => h.style.position = 'static');
+        }
+      });
       const image = canvas.toDataURL('image/jpeg', 0.9);
       const link = document.createElement('a');
       link.href = image;
       link.download = `dashboard_${activeCompany?.name || 'empresa'}.jpg`;
       link.click();
-    } catch (err) {} finally { setIsExporting(false); }
+    } catch (err) {
+      console.error(err);
+    } finally { setIsExporting(false); }
   };
 
   const exportAsPDF = async () => {
     if (!dashboardRef.current) return;
     setIsExporting(true);
     try {
-      const canvas = await html2canvas(dashboardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const canvas = await html2canvas(dashboardRef.current, { 
+        scale: 2, 
+        useCORS: true, 
+        backgroundColor: '#ffffff',
+        ignoreElements: (el) => el.classList.contains('no-print'),
+        onclone: (clonedDoc) => {
+          const allEls = clonedDoc.querySelectorAll('*');
+          allEls.forEach((el: any) => {
+            const style = window.getComputedStyle(el);
+            if (style.position === 'sticky' || style.position === 'fixed') {
+              el.style.position = 'static';
+            }
+          });
+        }
+      });
+      
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      // MARGENS SOLICITADAS: Sup: 2,5cm, Inf: 2,5cm, Esq: 3cm, Dir: 3cm
+      const marginTop = 25;
+      const marginBottom = 25;
+      const marginLeft = 30;
+      const marginRight = 30;
+      
+      const pageWidth = 210;
+      const pageHeight = 297;
+      
+      // Largura e altura útil dentro da folha
+      const contentWidth = pageWidth - marginLeft - marginRight; // 150mm
+      const contentHeightPerPage = pageHeight - marginTop - marginBottom; // 247mm
+      
       const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`dashboard_${activeCompany?.name || 'empresa'}.pdf`);
-    } catch (err) {} finally { setIsExporting(false); }
+      const imgScaledHeight = (imgProps.height * contentWidth) / imgProps.width;
+      
+      let heightLeft = imgScaledHeight;
+      let position = marginTop;
+
+      // Adiciona primeira página com as margens configuradas
+      pdf.addImage(imgData, 'PNG', marginLeft, position, contentWidth, imgScaledHeight);
+      heightLeft -= contentHeightPerPage;
+
+      // Fatiamento preciso para as próximas páginas mantendo as margens
+      while (heightLeft > 0) {
+        // O cálculo da posição vertical subtrai a altura útil para "rolar" a imagem do canvas
+        position = (heightLeft - imgScaledHeight) + marginTop;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', marginLeft, position, contentWidth, imgScaledHeight);
+        heightLeft -= contentHeightPerPage;
+      }
+
+      pdf.save(`Relatorio_Estrategico_${activeCompany?.name || 'RH_TOTAL'}.pdf`);
+    } catch (err) {
+      console.error("Erro na exportação PDF:", err);
+      alert("Erro ao gerar o documento. Verifique os dados e tente novamente.");
+    } finally { setIsExporting(false); }
   };
 
   if (data.length === 0) {
     return (
       <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center shadow-sm">
         <TrendingUp className="w-12 h-12 text-blue-400 mx-auto mb-4" />
-        <h3 className="text-2xl font-black text-slate-900">Seu Dashboard Estrategico</h3>
+        <h3 className="text-2xl font-black text-slate-900">Seu Dashboard Estratégico</h3>
         <p className="text-slate-500 max-w-md mx-auto mt-2 font-medium">Lance os dados da folha para visualizar indicadores e IA.</p>
       </div>
     );
@@ -138,154 +193,174 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
 
   return (
     <div className="space-y-6" ref={dashboardRef}>
-      {/* Titulo da Empresa - Centralizado */}
-      <div className="text-center no-print">
-        <h1 className="text-2xl font-black text-slate-800 uppercase tracking-[0.3em] italic">
+      {/* Cabeçalho do Relatório - Sempre visível na exportação */}
+      <div className="text-center py-8 bg-white rounded-3xl border border-slate-100 shadow-sm">
+        <h1 className="text-4xl font-black text-slate-900 uppercase tracking-[0.4em] italic mb-2">
           {activeCompany?.name || 'NOME DA EMPRESA'}
         </h1>
+        <div className="h-1.5 w-32 bg-blue-600 mx-auto rounded-full mb-4" />
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.6em] mb-1">
+          Relatório Executivo de Inteligência de Negócio
+        </p>
+        <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest">
+          BI & Gestão de Capital Humano
+        </p>
       </div>
 
-      {/* Controles do Dashboard */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-center gap-6 justify-between no-print">
+      {/* Controles de BI - Ocultos na Exportação */}
+      <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col lg:flex-row items-center gap-6 justify-between no-print">
         <div className="flex items-center gap-4">
-          <div className="bg-blue-600 p-2.5 rounded-xl">
-            <ArrowRightLeft className="w-6 h-6 text-white" />
+          <div className="bg-slate-900 p-3.5 rounded-2xl shadow-lg">
+            <ArrowRightLeft className="w-6 h-6 text-blue-400" />
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-900 tracking-tight">Estrategia & BI</h3>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Comparativo de Periodos</p>
+            <h3 className="text-lg font-black text-slate-900 tracking-tight italic uppercase">Módulo Comparativo</h3>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selecione os períodos para cruzamento</p>
           </div>
         </div>
         
-        <div className="flex flex-col items-center w-full lg:w-auto gap-2">
-          {/* Rotulo Meses em Analises - Centralizado com Laranja e Fonte Maior */}
+        <div className="flex flex-col items-center w-full lg:w-auto gap-3">
           <div className="flex justify-center w-full">
-            <span className="text-sm font-black text-orange-600 uppercase tracking-[0.3em]">
-              MESES EM ANÁLISES
+            <span className="text-[10px] font-black text-orange-600 uppercase tracking-[0.3em] bg-orange-50 px-5 py-1.5 rounded-full border border-orange-100">
+              MESES EM ANÁLISE
             </span>
           </div>
           
           <div className="flex items-center gap-4 flex-wrap justify-center">
-            <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-100 shadow-inner">
-              <select value={monthAId} onChange={(e) => setMonthAId(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black outline-none cursor-pointer focus:ring-2 focus:ring-blue-500">
+            <div className="flex items-center gap-3 bg-slate-100/50 p-2 rounded-2xl border border-slate-100">
+              <select value={monthAId} onChange={(e) => setMonthAId(e.target.value)} className="px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-black outline-none cursor-pointer focus:ring-2 focus:ring-blue-600 shadow-sm transition-all hover:border-blue-300">
                 {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
               </select>
-              <span className="text-orange-500 font-black text-xl italic px-2">vs</span>
-              <select value={monthBId} onChange={(e) => setMonthBId(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black outline-none cursor-pointer focus:ring-2 focus:ring-blue-500">
+              <span className="text-orange-500 font-black text-2xl italic px-1">vs</span>
+              <select value={monthBId} onChange={(e) => setMonthBId(e.target.value)} className="px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-black outline-none cursor-pointer focus:ring-2 focus:ring-blue-600 shadow-sm transition-all hover:border-blue-300">
                 {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
               </select>
             </div>
-            <div className="flex gap-2 border-l border-slate-200 pl-4">
-              <button onClick={exportAsImage} title="Exportar Imagem" className="p-2.5 text-slate-400 hover:text-blue-600 transition-all"><ImageIcon className="w-5 h-5" /></button>
-              <button onClick={exportAsPDF} title="Exportar PDF" className="p-2.5 bg-slate-900 text-white rounded-lg hover:bg-black transition-all shadow-md"><FileDown className="w-5 h-5" /></button>
+            <div className="flex gap-3 border-l border-slate-200 pl-4">
+              <button onClick={exportAsImage} title="Exportar JPG" className="p-3.5 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-2xl hover:bg-white hover:shadow-md transition-all"><ImageIcon className="w-6 h-6" /></button>
+              <button 
+                onClick={exportAsPDF} 
+                title="Exportar PDF A4 Profissional" 
+                className="px-8 py-3.5 bg-slate-900 text-white rounded-2xl hover:bg-black transition-all shadow-xl flex items-center gap-3 font-black text-[10px] uppercase tracking-[0.2em]"
+              >
+                <FileDown className="w-5 h-5 text-blue-400" />
+                {isExporting ? 'PROCESSANDO...' : 'RELATÓRIO PDF'}
+                {isExporting && <Loader2 className="w-4 h-4 animate-spin" />}
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* KPIs Principais */}
+      {/* Indicadores Chave (KPIs) */}
       {monthA && monthB && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm border-l-8 border-l-blue-600">
+          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2.5 h-full bg-blue-600" />
             <div className="flex items-center gap-3 text-blue-600 mb-4">
               <DollarSign className="w-5 h-5" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Folha Total</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Folha Atual</span>
             </div>
-            <p className="text-2xl lg:text-3xl font-black text-slate-900">R$ {monthB.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            <div className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black mt-3 ${getDiff(monthA.totalValue, monthB.totalValue) > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-              <span className="mr-1">
-                {getDiff(monthA.totalValue, monthB.totalValue) > 0 ? <ArrowUp className="w-3 h-3 inline" /> : <ArrowDown className="w-3 h-3 inline" />}
+            <p className="text-3xl font-black text-slate-900">R$ {monthB.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <div className={`inline-flex items-center px-4 py-1.5 rounded-xl text-[10px] font-black mt-5 border ${getDiff(monthA.totalValue, monthB.totalValue) > 0 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+              <span className="mr-1.5">
+                {getDiff(monthA.totalValue, monthB.totalValue) > 0 ? <ArrowUp className="w-3.5 h-3.5 inline" /> : <ArrowDown className="w-3.5 h-3.5 inline" />}
               </span>
-              {Math.abs(getDiff(monthA.totalValue, monthB.totalValue)).toFixed(2)}% 
+              {Math.abs(getDiff(monthA.totalValue, monthB.totalValue)).toFixed(2)}% de variação
             </div>
           </div>
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm border-l-8 border-l-emerald-500">
+          
+          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
+             <div className="absolute top-0 left-0 w-2.5 h-full bg-emerald-500" />
             <div className="flex items-center gap-3 text-emerald-500 mb-4">
               <Users className="w-5 h-5" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">QTD SERVIDORES</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Headcount Total</span>
             </div>
-            <p className="text-3xl font-black text-slate-900">{monthB.effectiveCount + monthB.contractedCount + monthB.commissionedCount}</p>
-            <div className="mt-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Var. {(monthB.effectiveCount + monthB.contractedCount + monthB.commissionedCount) - (monthA.effectiveCount + monthA.contractedCount + monthA.commissionedCount)}
+            <p className="text-4xl font-black text-slate-900">{monthB.effectiveCount + monthB.contractedCount + monthB.commissionedCount}</p>
+            <div className="mt-5 text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-50 py-1.5 px-4 rounded-xl w-fit border border-slate-100">
+              Saldo: {(monthB.effectiveCount + monthB.contractedCount + monthB.commissionedCount) - (monthA.effectiveCount + monthA.contractedCount + monthA.commissionedCount)} vagas
             </div>
           </div>
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm border-l-8 border-l-amber-500">
+
+          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2.5 h-full bg-amber-500" />
             <div className="flex items-center gap-3 text-amber-500 mb-4">
               <TrendingUp className="w-5 h-5" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ticket Medio</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Investimento Médio</span>
             </div>
             <p className="text-3xl font-black text-slate-900">R$ {(monthB.totalValue / (monthB.effectiveCount + monthB.contractedCount + monthB.commissionedCount || 1)).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</p>
-            <p className="text-[10px] text-slate-400 font-black uppercase mt-3 tracking-widest">INVESTIMENTO P/ SERVIDOR</p>
+            <p className="text-[10px] text-slate-400 font-black uppercase mt-5 tracking-widest border-t border-slate-50 pt-4">Custo per capita mensal</p>
           </div>
         </div>
       )}
 
-      {/* Graficos e Mix de Investimento */}
+      {/* Visões Gráficas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-sm font-black text-slate-900 uppercase mb-6 tracking-widest border-b border-slate-100 pb-3">Comparativo Selecionado</h3>
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+          <h3 className="text-xs font-black text-slate-900 uppercase mb-8 tracking-[0.2em] border-b border-slate-50 pb-5 italic">Tendência de Alocação</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={compData} margin={{ top: 40, right: 30, left: 20, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight="800" axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} fontWeight="900" axisLine={false} tickLine={false} />
                 <YAxis hide />
-                <Tooltip formatter={(val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
-                <Bar dataKey={labelA} fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={40}>
-                   <LabelList dataKey={labelA} position="top" formatter={(val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} style={{ fontSize: '10px', fontWeight: '800', fill: '#b45309' }} />
+                <Tooltip cursor={{fill: '#f8fafc'}} formatter={(val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
+                <Bar dataKey={labelA} fill="#f59e0b" radius={[10, 10, 0, 0]} barSize={35}>
+                   <LabelList dataKey={labelA} position="top" formatter={(val: number) => val.toLocaleString('pt-BR', { notation: 'compact' })} style={{ fontSize: '10px', fontWeight: '900', fill: '#b45309' }} />
                 </Bar>
-                <Bar dataKey={labelB} fill="#2563eb" radius={[6, 6, 0, 0]} barSize={40}>
-                   <LabelList dataKey={labelB} position="top" formatter={(val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} style={{ fontSize: '10px', fontWeight: '800', fill: '#1e40af' }} />
+                <Bar dataKey={labelB} fill="#2563eb" radius={[10, 10, 0, 0]} barSize={35}>
+                   <LabelList dataKey={labelB} position="top" formatter={(val: number) => val.toLocaleString('pt-BR', { notation: 'compact' })} style={{ fontSize: '10px', fontWeight: '900', fill: '#1e40af' }} />
                 </Bar>
-                <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }} />
+                <Legend verticalAlign="top" height={40} iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.1em' }} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-sm font-black text-slate-900 uppercase mb-6 tracking-widest border-b border-slate-100 pb-3 text-center">Mix de Investimento Atual</h3>
+        
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+          <h3 className="text-xs font-black text-slate-900 uppercase mb-8 tracking-[0.2em] border-b border-slate-50 pb-5 italic text-center">Mix Operacional Atual</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={8} dataKey="value" label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={75} outerRadius={115} paddingAngle={12} dataKey="value" stroke="none">
                   {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                 </Pie>
                 <Tooltip formatter={(val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
-                <Legend verticalAlign="bottom" iconType="circle" iconSize={10} wrapperStyle={{ fontSize: '10px', fontWeight: '800', textTransform: 'uppercase' }} />
+                <Legend verticalAlign="bottom" iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', paddingTop: '25px' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
 
-      {/* Tabela de Detalhamento Operacional */}
+      {/* Auditoria Operacional */}
       {monthA && monthB && operationalTotals && (
-        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden">
-          <div className="px-8 py-6 bg-slate-900 text-white">
-             <h3 className="font-black text-xs uppercase tracking-[0.2em]">DETALHAMENTO OPERACIONAL: {monthA.monthYear} VS {monthB.monthYear}</h3>
+        <div className="bg-white rounded-[3rem] border-2 border-slate-900 shadow-2xl overflow-hidden">
+          <div className="px-12 py-10 bg-slate-900 text-white flex justify-between items-center border-b border-blue-900">
+             <div>
+               <h3 className="font-black text-lg uppercase tracking-[0.3em] italic">Auditoria de Custo Operacional</h3>
+               <p className="text-xs text-blue-400 font-bold uppercase mt-2 tracking-widest">Base de Comparação: {monthA.monthYear} vs {monthB.monthYear}</p>
+             </div>
+             <div className="bg-blue-600/20 p-4 rounded-3xl border border-blue-600/30">
+                <TableIcon className="w-10 h-10 text-blue-500" />
+             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                  <th className="px-8 py-5">Vinculo</th>
-                  <th className="px-8 py-5 text-center">QTD (Var.)</th>
-                  <th className="px-8 py-5 text-center">
-                    <div className="text-[8px] opacity-60 mb-1 uppercase">{monthA.monthYear}</div>
-                    ANTERIOR (R$)
-                  </th>
-                  <th className="px-8 py-5 text-center">
-                    <div className="text-[8px] text-blue-600 mb-1 uppercase">{monthB.monthYear}</div>
-                    ATUAL (R$)
-                  </th>
-                  <th className="px-8 py-5 text-right">VAR %</th>
+                <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] border-b border-slate-100">
+                  <th className="px-12 py-7">Modalidade de Vínculo</th>
+                  <th className="px-12 py-7 text-center">Headcount (Δ)</th>
+                  <th className="px-12 py-7 text-center">Competência Anterior</th>
+                  <th className="px-12 py-7 text-center bg-blue-50/50">Mês Atual (R$)</th>
+                  <th className="px-12 py-7 text-right">Impacto %</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-slate-100">
                 {[
-                  { label: 'EFETIVOS', key: 'effective', color: 'text-blue-600' },
-                  { label: 'CONTRATADOS', key: 'contracted', color: 'text-emerald-600' },
-                  { label: 'COMISSIONADOS', key: 'commissioned', color: 'text-amber-500' }
+                  { label: 'QUADRO EFETIVO (CLT)', key: 'effective', color: 'text-blue-700' },
+                  { label: 'SERVIÇOS TERCEIRIZADOS (PJ)', key: 'contracted', color: 'text-emerald-700' },
+                  { label: 'FORÇA COMISSIONADA', key: 'commissioned', color: 'text-amber-600' }
                 ].map((item) => {
                   const countA = (monthA as any)[`${item.key}Count`] || 0;
                   const countB = (monthB as any)[`${item.key}Count`] || 0;
@@ -295,33 +370,33 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
                   const varPct = valA ? ((valB - valA) / valA) * 100 : 0;
 
                   return (
-                    <tr key={item.key} className="hover:bg-slate-50 transition-colors">
-                      <td className={`px-8 py-6 font-black ${item.color} uppercase italic tracking-tighter`}>{item.label}</td>
-                      <td className="px-8 py-6 text-center font-bold text-slate-700">
-                        {countB} <span className={`text-[10px] font-black ml-1 ${deltaQty > 0 ? 'text-red-500' : deltaQty < 0 ? 'text-emerald-500' : 'text-slate-300'}`}>
-                          ({deltaQty >= 0 ? '+' : ''}{deltaQty})
+                    <tr key={item.key} className="hover:bg-slate-50 transition-all group">
+                      <td className={`px-12 py-8 font-black ${item.color} uppercase italic tracking-tighter text-sm`}>{item.label}</td>
+                      <td className="px-12 py-8 text-center font-black text-slate-800">
+                        {countB} <span className={`text-[10px] font-black ml-3 px-3 py-1 rounded-xl shadow-sm ${deltaQty > 0 ? 'bg-red-50 text-red-600 border border-red-100' : deltaQty < 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-50 text-slate-300'}`}>
+                          {deltaQty >= 0 ? '+' : ''}{deltaQty}
                         </span>
                       </td>
-                      <td className="px-8 py-6 text-center font-bold text-slate-400 italic">R$ {valA.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-8 py-6 text-center font-black text-slate-900">R$ {valB.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                      <td className={`px-8 py-6 text-right font-black text-xs ${varPct > 0 ? 'text-red-600' : varPct < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                      <td className="px-12 py-8 text-center font-bold text-slate-400 italic">R$ {valA.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-12 py-8 text-center font-black text-slate-900 bg-blue-50/20">R$ {valB.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                      <td className={`px-12 py-8 text-right font-black text-xs ${varPct > 0 ? 'text-red-600' : varPct < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                         {varPct >= 0 ? '+' : ''}{varPct.toFixed(2)}%
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
-              <tfoot className="bg-slate-50/50 border-t-2 border-slate-100">
+              <tfoot className="bg-slate-900 text-white border-t-4 border-blue-600">
                 <tr>
-                  <td className="px-8 py-6 font-black text-slate-900 uppercase italic tracking-tighter">TOTAL</td>
-                  <td className="px-8 py-6 text-center font-black text-slate-900">
-                    {operationalTotals.qtyB} <span className={`text-[10px] font-black ml-1 ${operationalTotals.deltaQty > 0 ? 'text-red-500' : operationalTotals.deltaQty < 0 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                  <td className="px-12 py-8 font-black uppercase italic tracking-widest text-sm">TOTAL CONSOLIDADO</td>
+                  <td className="px-12 py-8 text-center font-black text-xl">
+                    {operationalTotals.qtyB} <span className={`text-[10px] font-black ml-3 ${operationalTotals.deltaQty > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                       ({operationalTotals.deltaQty >= 0 ? '+' : ''}{operationalTotals.deltaQty})
                     </span>
                   </td>
-                  <td className="px-8 py-6 text-center font-black text-slate-500 italic">R$ {operationalTotals.valA.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                  <td className="px-8 py-6 text-center font-black text-blue-900">R$ {operationalTotals.valB.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                  <td className={`px-8 py-6 text-right font-black text-xs ${operationalTotals.varPct > 0 ? 'text-red-600' : operationalTotals.varPct < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  <td className="px-12 py-8 text-center font-black text-slate-400 italic">R$ {operationalTotals.valA.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                  <td className="px-12 py-8 text-center font-black text-blue-400 text-2xl">R$ {operationalTotals.valB.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                  <td className={`px-12 py-8 text-right font-black text-sm ${operationalTotals.varPct > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                     {operationalTotals.varPct >= 0 ? '+' : ''}{operationalTotals.varPct.toFixed(2)}%
                   </td>
                 </tr>
@@ -331,24 +406,26 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
         </div>
       )}
 
-      {/* Planilha de Analise Evolutiva */}
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden">
-        <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <TableIcon className="w-6 h-6 text-blue-400" />
-            <h3 className="font-black text-sm uppercase tracking-[0.2em]">Planilha de Performance Evolutiva</h3>
+      {/* Histórico Evolutivo */}
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
+        <div className="px-10 py-8 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100">
+              <TableIcon className="w-6 h-6 text-blue-600" />
+            </div>
+            <h3 className="font-black text-sm uppercase text-slate-900 tracking-[0.2em] italic">Análise de Performance Histórica</h3>
           </div>
-          <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Analise Longitudinal de Fluxo</span>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">BI Longitudinal Engine</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                <th className="px-8 py-5">Competencia</th>
-                <th className="px-8 py-5 text-center">Qtd Total</th>
-                <th className="px-8 py-5 text-center">Var. Qtd (%)</th>
-                <th className="px-8 py-5 text-right">Valor Total (R$)</th>
-                <th className="px-8 py-5 text-right">Var. Valor (%)</th>
+              <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                <th className="px-10 py-6">Competência</th>
+                <th className="px-10 py-6 text-center">Headcount</th>
+                <th className="px-10 py-6 text-center">Fluxo (Δ%)</th>
+                <th className="px-10 py-6 text-right">Investimento (R$)</th>
+                <th className="px-10 py-6 text-right">Diferencial %</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -361,113 +438,118 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
                 const varVal = prevItem ? ((item.totalValue - prevItem.totalValue) / prevItem.totalValue) * 100 : 0;
 
                 return (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-8 py-5 font-black text-slate-900 uppercase italic tracking-tighter">{item.monthYear}</td>
-                    <td className="px-8 py-5 text-center font-bold text-slate-700">{totalCount}</td>
-                    <td className={`px-8 py-5 text-center font-black text-xs ${varQty > 0 ? 'text-red-600' : varQty < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                      {index > 0 ? (
-                        <div className="flex items-center justify-center gap-1">
-                          {varQty > 0 ? <ArrowUpRight className="w-3 h-3" /> : varQty < 0 ? <ArrowDownRight className="w-3 h-3" /> : null}
-                          {varQty.toFixed(2)}%
-                        </div>
-                      ) : '-'}
+                  <tr key={item.id} className="hover:bg-blue-50/20 transition-all">
+                    <td className="px-10 py-6 font-black text-slate-900 uppercase italic text-sm">{item.monthYear}</td>
+                    <td className="px-10 py-6 text-center font-bold text-slate-700">{totalCount}</td>
+                    <td className={`px-10 py-6 text-center font-black text-xs ${varQty > 0 ? 'text-red-600' : varQty < 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
+                      {index > 0 ? `${varQty >= 0 ? '+' : ''}${varQty.toFixed(1)}%` : '-'}
                     </td>
-                    <td className="px-8 py-5 text-right font-black text-slate-900">R$ {item.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                    <td className={`px-8 py-5 text-right font-black text-xs ${varVal > 0 ? 'text-red-600' : varVal < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                      {index > 0 ? (
-                        <div className="flex items-center justify-end gap-1">
-                          {varVal > 0 ? <ArrowUpRight className="w-3 h-3" /> : varVal < 0 ? <ArrowDownRight className="w-3 h-3" /> : null}
-                          {varVal.toFixed(2)}%
-                        </div>
-                      ) : '-'}
+                    <td className="px-10 py-6 text-right font-black text-slate-900">R$ {item.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                    <td className={`px-10 py-6 text-right font-black text-xs ${varVal > 0 ? 'text-red-600' : varVal < 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
+                      {index > 0 ? `${varVal >= 0 ? '+' : ''}${varVal.toFixed(1)}%` : '-'}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
-            <tfoot>
-              <tr className="bg-slate-100 border-t-2 border-slate-900">
-                <td className="px-8 py-5 font-black text-slate-900 uppercase">TOTAL HISTORICO</td>
-                <td className="px-8 py-5 text-center font-black text-slate-900">{grandTotals.count}</td>
-                <td className="px-8 py-5 text-center"></td>
-                <td className="px-8 py-5 text-right font-black text-slate-900">R$ {grandTotals.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                <td className="px-8 py-5 text-right"></td>
-              </tr>
-            </tfoot>
           </table>
         </div>
       </div>
 
-      {/* Secao de Analise IA */}
+      {/* Relatório Estratégico IA */}
       <div className="space-y-6">
         {!analysis && !isGenerating && (
-          <div className="bg-slate-900 p-12 rounded-[2.5rem] border border-slate-800 text-center shadow-2xl relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-transparent opacity-50"></div>
+          <div className="bg-slate-900 p-20 rounded-[4rem] border border-slate-800 text-center shadow-2xl relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-600/15 via-transparent to-teal-500/10"></div>
             <div className="relative z-10 flex flex-col items-center">
-              <div className="bg-blue-600 p-5 rounded-3xl mb-6 shadow-xl group-hover:scale-110 transition-transform">
-                <BrainCircuit className="w-12 h-12 text-white" />
+              <div className="bg-blue-600 p-8 rounded-[2.5rem] mb-10 shadow-2xl group-hover:scale-110 group-hover:rotate-6 transition-all duration-700">
+                <BrainCircuit className="w-20 h-20 text-white" />
               </div>
-              <h3 className="text-3xl font-black text-white uppercase tracking-tighter italic">Analise Estrategica AI</h3>
-              <p className="text-slate-400 mt-2 max-w-lg mx-auto font-medium text-lg">Clique no botao abaixo para que nossa inteligencia artificial processe os dados da folha e gere um relatorio executivo detalhado.</p>
+              <h3 className="text-5xl font-black text-white uppercase tracking-tighter italic mb-6">Master Intelligence IA</h3>
+              <p className="text-slate-400 max-w-2xl mx-auto font-medium text-xl leading-relaxed">
+                Nossa inteligência avançada cruzará sua base histórica para gerar recomendações imediatas de redução de custos e otimização do quadro.
+              </p>
               <button 
                 onClick={onGenerateAnalysis}
-                className="mt-10 px-12 py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xl flex items-center gap-3 transition-all shadow-xl shadow-blue-600/30 active:scale-95"
+                className="mt-14 px-20 py-7 bg-blue-600 hover:bg-blue-500 text-white rounded-[2.5rem] font-black text-2xl flex items-center gap-5 transition-all shadow-2xl shadow-blue-600/50 active:scale-95 group/btn"
               >
-                <Sparkles className="w-6 h-6" /> GERAR ANALISE COMPLETA
+                <Sparkles className="w-10 h-10 group-hover/btn:animate-pulse text-cyan-200" /> GERAR RELATÓRIO EXECUTIVO
               </button>
             </div>
           </div>
         )}
 
         {isGenerating && (
-          <div className="bg-white p-16 rounded-[2.5rem] border border-slate-200 text-center shadow-sm flex flex-col items-center">
-            <Loader2 className="w-16 h-16 animate-spin text-blue-600 mb-6" />
-            <h3 className="text-2xl font-black text-slate-900 uppercase">Processando Inteligencia de RH</h3>
-            <p className="text-slate-500 font-bold uppercase text-xs tracking-widest mt-2 animate-pulse">Cruzando dados e tendencias do mercado...</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-50 p-8 rounded-2xl flex items-start gap-4 text-red-700 border border-red-200">
-            <AlertCircle className="w-8 h-8 shrink-0" />
-            <div><h3 className="font-black text-lg uppercase">Falha na Analise</h3><p className="text-sm font-medium opacity-90">{error}</p></div>
+          <div className="bg-white p-24 rounded-[4rem] border border-slate-200 text-center shadow-lg flex flex-col items-center relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-100 overflow-hidden">
+                <div className="w-1/2 h-full bg-blue-600 animate-[slide_1.5s_infinite_linear]" />
+            </div>
+            <Loader2 className="w-24 h-24 animate-spin text-blue-600 mb-10" />
+            <h3 className="text-4xl font-black text-slate-900 uppercase italic">Refinando Algoritmos</h3>
+            <p className="text-slate-400 font-bold uppercase text-xs tracking-[0.5em] mt-5 animate-pulse">Cruzando indicadores setoriais e análise de variância...</p>
           </div>
         )}
 
         {analysis && (
-          <div className="bg-white p-8 md:p-12 rounded-[2.5rem] shadow-sm border border-slate-200 relative overflow-hidden">
-            <div className="flex items-center justify-between mb-8 border-b border-slate-50 pb-6 relative z-10">
-              <div className="flex items-center gap-6">
-                <div className="bg-slate-900 p-4 rounded-2xl shadow-lg">
-                  <BrainCircuit className="w-8 h-8 text-blue-400" />
+          <div className="bg-white p-14 md:p-20 rounded-[4rem] shadow-2xl border border-slate-200 relative overflow-hidden">
+            <div className="flex flex-col md:flex-row items-center justify-between mb-16 border-b border-slate-50 pb-12 gap-10">
+              <div className="flex items-center gap-10">
+                <div className="bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl shadow-blue-900/15">
+                  <BrainCircuit className="w-14 h-14 text-blue-400" />
                 </div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight italic">Relatorio IA de RH</h2>
-                  <p className="text-[9px] text-blue-600 font-black uppercase tracking-[0.3em] mt-1">Gestao Estrategica de Capital Humano</p>
+                <div className="text-center md:text-left">
+                  <h2 className="text-4xl font-black text-slate-900 tracking-tight italic uppercase">Análise de IA</h2>
+                  <p className="text-xs text-blue-600 font-black uppercase tracking-[0.5em] mt-3">Advanced Strategy Report</p>
                 </div>
               </div>
               <button 
                 onClick={onGenerateAnalysis}
-                className="text-[10px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg hover:bg-blue-50 transition-all no-print"
+                className="text-xs font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest flex items-center gap-4 px-8 py-4 bg-slate-50 rounded-[1.5rem] hover:bg-white hover:shadow-md transition-all no-print border border-slate-100"
               >
-                <RefreshCw className="w-3 h-3" /> Atualizar Analise
+                <RefreshCw className="w-5 h-5" /> Atualizar Análise
               </button>
             </div>
-            <div className="prose prose-slate max-w-none text-slate-700 relative z-10 text-sm md:text-base leading-relaxed font-medium">
+            
+            <div className="prose prose-slate max-w-none text-slate-700 text-lg md:text-xl leading-relaxed font-medium">
               {analysis.split('\n').map((line, i) => {
                 const trimmed = line.trim();
-                if (trimmed === '') return <div key={i} className="h-4" />;
-                if (line.startsWith('# ')) return <h1 key={i} className="text-3xl font-black text-slate-900 mt-10 mb-6 border-l-8 border-blue-700 pl-4 uppercase tracking-tight">{line.replace('# ', '')}</h1>;
-                if (line.startsWith('## ')) return <h2 key={i} className="text-xl font-black text-slate-800 mt-8 mb-4 flex items-center gap-3"><span className="w-2 h-6 bg-blue-600 rounded-full" />{line.replace('## ', '')}</h2>;
-                if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="ml-6 list-disc mb-3 marker:text-blue-600 font-bold">{line.substring(2)}</li>;
-                // Marcadores de insights IA (convertidos de emoji para símbolo mais simples)
-                if (line.startsWith('>') || line.startsWith('INFO:')) return <div key={i} className="my-6 p-6 bg-slate-900 text-white rounded-2xl border-l-8 border-l-blue-600 font-black text-sm leading-relaxed">{line}</div>;
-                return <p key={i} className="mb-4">{line}</p>;
+                if (trimmed === '') return <div key={i} className="h-8" />;
+                if (line.startsWith('# ')) return (
+                   <h1 key={i} className="text-5xl font-black text-slate-900 mt-16 mb-10 border-l-[12px] border-blue-600 pl-8 uppercase tracking-tighter bg-slate-50/70 py-6 rounded-r-3xl shadow-sm">
+                     {line.replace('# ', '')}
+                   </h1>
+                );
+                if (line.startsWith('## ')) return (
+                   <h2 key={i} className="text-3xl font-black text-slate-800 mt-14 mb-8 flex items-center gap-5 italic border-b-2 border-slate-100 pb-3">
+                     <span className="w-4 h-10 bg-blue-600 rounded-full shadow-lg shadow-blue-600/20" />
+                     {line.replace('## ', '')}
+                   </h2>
+                );
+                if (line.startsWith('- ') || line.startsWith('* ')) return (
+                   <li key={i} className="ml-10 list-none mb-5 relative pl-10 font-bold text-slate-800 border-l-2 border-blue-100">
+                     <span className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 rounded-full ring-4 ring-blue-50" />
+                     {line.substring(2)}
+                   </li>
+                );
+                if (line.startsWith('>') || line.startsWith('INFO:')) return (
+                   <div key={i} className="my-14 p-10 bg-slate-900 text-white rounded-[2.5rem] border-l-[15px] border-l-blue-600 font-black text-base md:text-lg leading-relaxed shadow-2xl relative overflow-hidden group">
+                     <div className="absolute top-6 right-8 text-blue-400/20 group-hover:scale-150 transition-transform duration-1000"><Sparkles className="w-16 h-16" /></div>
+                     <span className="relative z-10 italic tracking-tight">{line.replace('>', '').replace('INFO:', '')}</span>
+                   </div>
+                );
+                return <p key={i} className="mb-8">{line}</p>;
               })}
             </div>
           </div>
         )}
       </div>
+      
+      <style>{`
+        @keyframes slide {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(200%); }
+        }
+      `}</style>
     </div>
   );
 };
