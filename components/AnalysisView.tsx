@@ -151,7 +151,6 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
 
       // Fatiamento preciso para as próximas páginas mantendo as margens
       while (heightLeft > 0) {
-        // O cálculo da posição vertical subtrai a altura útil para "rolar" a imagem do canvas
         position = (heightLeft - imgScaledHeight) + marginTop;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', marginLeft, position, contentWidth, imgScaledHeight);
@@ -193,7 +192,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
 
   return (
     <div className="space-y-6" ref={dashboardRef}>
-      {/* Cabeçalho do Relatório - Sempre visível na exportação */}
+      {/* Cabeçalho do Relatório */}
       <div className="text-center py-8 bg-white rounded-3xl border border-slate-100 shadow-sm">
         <h1 className="text-4xl font-black text-slate-900 uppercase tracking-[0.4em] italic mb-2">
           {activeCompany?.name || 'NOME DA EMPRESA'}
@@ -207,7 +206,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
         </p>
       </div>
 
-      {/* Controles de BI - Ocultos na Exportação */}
+      {/* Controles de BI */}
       <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col lg:flex-row items-center gap-6 justify-between no-print">
         <div className="flex items-center gap-4">
           <div className="bg-slate-900 p-3.5 rounded-2xl shadow-lg">
@@ -333,7 +332,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
         </div>
       </div>
 
-      {/* Auditoria Operacional */}
+      {/* Auditoria Operacional - Ajuste de Nomes de Categoria */}
       {monthA && monthB && operationalTotals && (
         <div className="bg-white rounded-[3rem] border-2 border-slate-900 shadow-2xl overflow-hidden">
           <div className="px-12 py-10 bg-slate-900 text-white flex justify-between items-center border-b border-blue-900">
@@ -358,9 +357,9 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {[
-                  { label: 'QUADRO EFETIVO (CLT)', key: 'effective', color: 'text-blue-700' },
-                  { label: 'SERVIÇOS TERCEIRIZADOS (PJ)', key: 'contracted', color: 'text-emerald-700' },
-                  { label: 'FORÇA COMISSIONADA', key: 'commissioned', color: 'text-amber-600' }
+                  { label: 'EFETIVOS', key: 'effective', color: 'text-blue-700' },
+                  { label: 'CONTRATADOS', key: 'contracted', color: 'text-emerald-700' },
+                  { label: 'COMISSIONADOS', key: 'commissioned', color: 'text-amber-600' }
                 ].map((item) => {
                   const countA = (monthA as any)[`${item.key}Count`] || 0;
                   const countB = (monthB as any)[`${item.key}Count`] || 0;
