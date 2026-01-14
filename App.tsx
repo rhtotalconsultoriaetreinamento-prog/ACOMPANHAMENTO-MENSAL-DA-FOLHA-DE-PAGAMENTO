@@ -30,7 +30,6 @@ const STORAGE_KEYS = {
   COLLAPSED: 'gestorpro_sidebar_collapsed'
 };
 
-// Componente de Logo RH TOTAL (Baseado na imagem enviada)
 const RHTotalLogo: React.FC<{ className?: string }> = ({ className = "w-10 h-10" }) => (
   <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="50" cy="50" r="48" stroke="currentColor" strokeWidth="4" className="text-cyan-500/30" />
@@ -48,21 +47,25 @@ const App: React.FC = () => {
 
   const [allCompanies, setAllCompanies] = useState<CompanyData[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState<string | null>(localStorage.getItem(STORAGE_KEYS.ACTIVE_ID));
-  const [activeTab, setActiveTab] = useState<AppTab>((localStorage.getItem(STORAGE_KEYS.TAB) as AppTab) || 'empresa');
+  
+  // Abre no dashboard se houver empresa, senão na lista de empresas
+  const [activeTab, setActiveTab] = useState<AppTab>(() => {
+    const hasCompany = localStorage.getItem(STORAGE_KEYS.ACTIVE_ID);
+    return hasCompany ? 'dashboard' : 'empresa';
+  });
+
   const [analysis, setAnalysis] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem(STORAGE_KEYS.COLLAPSED) === 'true');
-  
   const [cloudStatus, setCloudStatus] = useState<'connecting' | 'connected' | 'error' | 'local'>('connecting');
 
   const loadData = async () => {
     setCloudStatus('connecting');
     try {
       const connection = await supabaseService.testConnection();
-      
       if (connection.success) {
         setCloudStatus('connected');
         const cloudData = await supabaseService.getCompanies();
@@ -89,10 +92,8 @@ const App: React.FC = () => {
   }, [isCollapsed]);
 
   useEffect(() => {
-    if (allCompanies.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.COMPANIES, JSON.stringify(allCompanies));
-    }
-  }, [allCompanies]);
+    if (activeCompanyId) localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, activeCompanyId);
+  }, [activeCompanyId]);
 
   const visibleCompanies = useMemo(() => {
     if (!auth.user) return [];
@@ -104,28 +105,23 @@ const App: React.FC = () => {
     visibleCompanies.find(c => c.id === activeCompanyId) || null
   , [visibleCompanies, activeCompanyId]);
 
-  useEffect(() => {
-    const triggerAnalysis = async () => {
-      if (activeCompany && activeCompany.payrollEntries.length > 0) {
-        setIsGenerating(true);
-        setError(undefined);
-        try {
-          const result = await analyzePayroll(activeCompany.payrollEntries, activeCompany);
-          setAnalysis(result);
-        } catch (err: any) {
-          setError(err.message);
-        } finally {
-          setIsGenerating(false);
-        }
-      } else {
-        setAnalysis('');
-      }
-    };
-
-    if (activeTab === 'dashboard') {
-      triggerAnalysis();
+  const handleGenerateAnalysis = async () => {
+    if (!activeCompany || activeCompany.payrollEntries.length === 0) {
+      alert("Lance dados na folha antes de gerar a análise.");
+      return;
     }
-  }, [activeTab, activeCompany]);
+    
+    setIsGenerating(true);
+    setError(undefined);
+    try {
+      const result = await analyzePayroll(activeCompany.payrollEntries, activeCompany);
+      setAnalysis(result);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const handleLogin = (name: string, role: 'admin' | 'reseller', linkedCompanyId?: string) => {
     const newState = { isAuthenticated: true, user: { name, role, linkedCompanyId } };
@@ -133,7 +129,7 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(newState));
     if (linkedCompanyId) {
       setActiveCompanyId(linkedCompanyId);
-      setActiveTab('lancamento');
+      setActiveTab('dashboard');
     } else {
       setActiveTab('empresa');
     }
@@ -146,39 +142,27 @@ const App: React.FC = () => {
 
   const handleUpdatePayroll = async (entries: PayrollData[]) => {
     if (!activeCompanyId) return;
-    
+    setAllCompanies(prev => prev.map(c => 
+      c.id === activeCompanyId ? { ...c, payrollEntries: entries } : c
+    ));
     const currentEntries = activeCompany?.payrollEntries || [];
     const changedEntry = entries.find(e => {
       const existing = currentEntries.find(ce => ce.id === e.id);
       return !existing || JSON.stringify(existing) !== JSON.stringify(e);
     });
-
-    setAllCompanies(prev => prev.map(c => 
-      c.id === activeCompanyId ? { ...c, payrollEntries: entries } : c
-    ));
-
     if (changedEntry) {
-      try { 
-        await supabaseService.savePayrollEntry(activeCompanyId, changedEntry); 
-      } catch(e) {
-        console.error("Erro ao salvar no banco:", e);
-      }
+      try { await supabaseService.savePayrollEntry(activeCompanyId, changedEntry); } catch(e) {}
     }
   };
 
   const handleDeletePayrollEntry = async (entryId: string) => {
     if (!activeCompanyId) return;
-    
     try {
       await supabaseService.deletePayrollEntry(entryId);
       setAllCompanies(prev => prev.map(c => 
-        c.id === activeCompanyId 
-          ? { ...c, payrollEntries: c.payrollEntries.filter(e => e.id !== entryId) } 
-          : c
+        c.id === activeCompanyId ? { ...c, payrollEntries: c.payrollEntries.filter(e => e.id !== entryId) } : c
       ));
-    } catch (e) {
-      alert("Erro ao excluir lançamento na nuvem.");
-    }
+    } catch (e) {}
   };
 
   if (isLoading) {
@@ -211,7 +195,6 @@ const App: React.FC = () => {
               <button 
                 key={tab.id}
                 onClick={() => {setActiveTab(tab.id as AppTab); setIsMenuOpen(false);}} 
-                title={isCollapsed ? tab.label : ''}
                 className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-4 px-5'} py-4 rounded-xl transition-all ${activeTab === tab.id ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-600/20' : 'text-slate-400 hover:bg-slate-800'}`}
               >
                 <tab.icon className="w-5 h-5 shrink-0" />
@@ -221,31 +204,17 @@ const App: React.FC = () => {
           </nav>
 
           <div className="p-3 border-t border-slate-800">
-            <div className={`p-3 rounded-xl border mb-2 text-center transition-all ${
-              cloudStatus === 'connected' ? 'bg-cyan-500/10 border-cyan-500/30' : 
-              cloudStatus === 'error' ? 'bg-red-500/10 border-red-500/30' : 
-              'bg-amber-500/10 border-amber-500/30'
-            }`}>
-              <p className={`text-[9px] font-black uppercase tracking-widest mb-1 flex items-center justify-center gap-2 ${
-                cloudStatus === 'connected' ? 'text-cyan-400' : 
-                cloudStatus === 'error' ? 'text-red-400' : 
-                'text-amber-500'
-              }`}>
+            <div className={`p-3 rounded-xl border mb-2 text-center transition-all ${cloudStatus === 'connected' ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
+              <p className={`text-[9px] font-black uppercase tracking-widest mb-1 flex items-center justify-center gap-2 ${cloudStatus === 'connected' ? 'text-cyan-400' : 'text-amber-500'}`}>
                 {cloudStatus === 'connected' ? <Database className="w-3 h-3" /> : <CloudOff className="w-3 h-3" />}
-                {!isCollapsed && (cloudStatus === 'connected' ? 'Nuvem Ativa' : 'Offline')}
+                {!isCollapsed && (cloudStatus === 'connected' ? 'Sincronizado' : 'Modo Local')}
               </p>
               {!isCollapsed && <p className="text-[10px] font-black text-slate-200 truncate">{auth.user?.name}</p>}
-              
-              <button onClick={handleLogout} className={`mt-2 w-full text-[10px] text-red-400 font-black py-2 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center gap-2 uppercase`}>
-                <LogOut className="w-3 h-3" />
-                {!isCollapsed && <span>Sair</span>}
+              <button onClick={handleLogout} className="mt-2 w-full text-[10px] text-red-400 font-black py-2 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center gap-2 uppercase">
+                <LogOut className="w-3 h-3" /> {!isCollapsed && <span>Sair</span>}
               </button>
             </div>
-            
-            <button 
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="hidden md:flex w-full items-center justify-center py-2 text-slate-500 hover:text-white transition-colors"
-            >
+            <button onClick={() => setIsCollapsed(!isCollapsed)} className="hidden md:flex w-full items-center justify-center py-2 text-slate-500 hover:text-white transition-colors">
               {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
             </button>
           </div>
@@ -256,57 +225,34 @@ const App: React.FC = () => {
         <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40 shadow-sm">
            <div className="flex items-center gap-4">
              <button onClick={() => setIsMenuOpen(true)} className="md:hidden p-2 bg-slate-100 rounded-xl"><Menu /></button>
-             <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
-                {activeTab === 'empresa' && 'Empresas'}
-                {activeTab === 'lancamento' && 'Folha de Pagamento'}
-                {activeTab === 'dashboard' && 'Estratégia RH'}
-                {activeTab === 'usuarios' && 'Controle de Usuários'}
-             </h2>
+             <div className="flex flex-col">
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-none">
+                  {activeTab === 'empresa' && 'Gestão de Carteira'}
+                  {activeTab === 'lancamento' && 'Lançamentos Mensais'}
+                  {activeTab === 'dashboard' && 'Dashboard Estratégico'}
+                  {activeTab === 'usuarios' && 'Controle de Acessos'}
+                </h2>
+                {activeCompany && (
+                  <span className="text-[10px] font-black text-cyan-600 uppercase tracking-widest mt-1 flex items-center gap-1">
+                    <Building2 className="w-3 h-3" /> {activeCompany.name}
+                  </span>
+                )}
+             </div>
            </div>
            <div className="flex items-center gap-3">
-             {activeCompany && !isCollapsed && (
-               <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg">
-                 <Building2 className="w-4 h-4 text-cyan-600" />
-                 <span className="text-xs font-black text-slate-600 uppercase truncate max-w-[150px]">{activeCompany.name}</span>
-               </div>
-             )}
              <button onClick={loadData} className="p-2 text-slate-400 hover:text-cyan-600 transition-all"><RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} /></button>
            </div>
         </header>
 
         <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
           {activeTab === 'empresa' && (
-            <CompanyForm 
-              companies={visibleCompanies} 
-              activeCompanyId={activeCompanyId} 
-              onSave={async (data) => {
-                await supabaseService.saveCompany(data);
-                setAllCompanies(prev => [...prev, data]);
-              }} 
-              onSelect={(id) => {setActiveCompanyId(id); setActiveTab('lancamento');}} 
-              onDelete={async (id) => {
-                if (window.confirm('Excluir empresa permanentemente da nuvem?')) {
-                  try {
-                    await supabaseService.deleteCompany(id);
-                    setAllCompanies(prev => prev.filter(c => c.id !== id));
-                    if (activeCompanyId === id) setActiveCompanyId(null);
-                  } catch (e) {
-                    alert("Erro ao excluir empresa.");
-                  }
-                }
-              }} 
-            />
+            <CompanyForm companies={visibleCompanies} activeCompanyId={activeCompanyId} onSave={async (data) => { await supabaseService.saveCompany(data); setAllCompanies(prev => [...prev, data]); }} onSelect={(id) => {setActiveCompanyId(id); setActiveTab('dashboard');}} onDelete={async (id) => { if (window.confirm('Excluir empresa?')) { await supabaseService.deleteCompany(id); setAllCompanies(prev => prev.filter(c => c.id !== id)); if (activeCompanyId === id) setActiveCompanyId(null); } }} />
           )}
           {activeTab === 'lancamento' && activeCompany && (
-            <DataForm 
-              onDataChange={handleUpdatePayroll} 
-              onDeleteEntry={handleDeletePayrollEntry}
-              data={activeCompany.payrollEntries} 
-              activeCompany={activeCompany} 
-            />
+            <DataForm onDataChange={handleUpdatePayroll} onDeleteEntry={handleDeletePayrollEntry} data={activeCompany.payrollEntries} activeCompany={activeCompany} />
           )}
           {activeTab === 'dashboard' && activeCompany && (
-            <AnalysisView data={activeCompany.payrollEntries} analysis={analysis} isGenerating={isGenerating} error={error} activeCompany={activeCompany} />
+            <AnalysisView data={activeCompany.payrollEntries} analysis={analysis} isGenerating={isGenerating} error={error} activeCompany={activeCompany} onGenerateAnalysis={handleGenerateAnalysis} />
           )}
           {activeTab === 'usuarios' && auth.user?.role === 'admin' && (
             <UserManagement companies={allCompanies} />
