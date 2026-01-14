@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { PayrollData, CompanyData } from '../types';
-import { FileText, TrendingUp, AlertCircle, Loader2, ArrowRightLeft, BrainCircuit, Users, DollarSign, Image as ImageIcon, FileDown, Building2, Sparkles, RefreshCw, Table as TableIcon, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { FileText, TrendingUp, AlertCircle, Loader2, ArrowRightLeft, BrainCircuit, Users, DollarSign, Image as ImageIcon, FileDown, Building2, Sparkles, RefreshCw, Table as TableIcon, ArrowUpRight, ArrowDownRight, ArrowUp, ArrowDown } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -27,14 +27,16 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
   const sortedData = useMemo(() => {
     const monthOrder: { [key: string]: number } = {
       'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4, 'Maio': 5, 'Junho': 6,
-      'Julho': 7, 'Agosto': 8, 'Setembro': 9, 'Outubro': 10, 'Novembro': 11, 'Dezembro': 12, '13º': 13
+      'Julho': 7, 'Agosto': 8, 'Setembro': 9, 'Outubro': 10, 'Novembro': 11, 'Dezembro': 12, '13': 13
     };
 
     return [...data].sort((a, b) => {
       const [mA, yA] = a.monthYear.split('/');
       const [mB, yB] = b.monthYear.split('/');
       if (yA !== yB) return Number(yA) - Number(yB);
-      return (monthOrder[mA] || 0) - (monthOrder[mB] || 0);
+      const mAName = mA.replace('º', '');
+      const mBName = mB.replace('º', '');
+      return (monthOrder[mAName] || 0) - (monthOrder[mBName] || 0);
     });
   }, [data]);
 
@@ -57,6 +59,28 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
       setMonthBId(data[0].id);
     }
   }, [data]);
+
+  const monthA = data.find(d => d.id === monthAId);
+  const monthB = data.find(d => d.id === monthBId);
+
+  // Totais para a tabela de Detalhamento Operacional
+  const operationalTotals = useMemo(() => {
+    if (!monthA || !monthB) return null;
+    
+    const qtyA = (monthA.effectiveCount || 0) + (monthA.contractedCount || 0) + (monthA.commissionedCount || 0);
+    const qtyB = (monthB.effectiveCount || 0) + (monthB.contractedCount || 0) + (monthB.commissionedCount || 0);
+    const valA = (monthA.effectiveValue || 0) + (monthA.contractedValue || 0) + (monthA.commissionedValue || 0);
+    const valB = (monthB.effectiveValue || 0) + (monthB.contractedValue || 0) + (monthB.commissionedValue || 0);
+    
+    return {
+      qtyA,
+      qtyB,
+      valA,
+      valB,
+      deltaQty: qtyB - qtyA,
+      varPct: valA ? ((valB - valA) / valA) * 100 : 0
+    };
+  }, [monthA, monthB]);
 
   const exportAsImage = async () => {
     if (!dashboardRef.current) return;
@@ -90,14 +114,12 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
     return (
       <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center shadow-sm">
         <TrendingUp className="w-12 h-12 text-blue-400 mx-auto mb-4" />
-        <h3 className="text-2xl font-black text-slate-900">Seu Dashboard Estratégico</h3>
+        <h3 className="text-2xl font-black text-slate-900">Seu Dashboard Estrategico</h3>
         <p className="text-slate-500 max-w-md mx-auto mt-2 font-medium">Lance os dados da folha para visualizar indicadores e IA.</p>
       </div>
     );
   }
 
-  const monthA = data.find(d => d.id === monthAId);
-  const monthB = data.find(d => d.id === monthBId);
   const getDiff = (valA: number, valB: number) => valA ? ((valB - valA) / valA) * 100 : 0;
   const labelA = monthA?.monthYear || 'A';
   const labelB = monthB?.monthYear || 'B';
@@ -116,6 +138,13 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
 
   return (
     <div className="space-y-6" ref={dashboardRef}>
+      {/* Titulo da Empresa - Centralizado */}
+      <div className="text-center no-print">
+        <h1 className="text-2xl font-black text-slate-800 uppercase tracking-[0.3em] italic">
+          {activeCompany?.name || 'NOME DA EMPRESA'}
+        </h1>
+      </div>
+
       {/* Controles do Dashboard */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-center gap-6 justify-between no-print">
         <div className="flex items-center gap-4">
@@ -123,24 +152,33 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
             <ArrowRightLeft className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-900 tracking-tight">Estratégia & BI</h3>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Comparativo de Períodos</p>
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">Estrategia & BI</h3>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Comparativo de Periodos</p>
           </div>
         </div>
         
-        <div className="flex items-center gap-4 flex-wrap justify-center">
-          <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
-            <select value={monthAId} onChange={(e) => setMonthAId(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black outline-none cursor-pointer">
-              {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
-            </select>
-            <span className="text-slate-400 font-black text-sm italic">vs</span>
-            <select value={monthBId} onChange={(e) => setMonthBId(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black outline-none cursor-pointer">
-              {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
-            </select>
+        <div className="flex flex-col items-center w-full lg:w-auto gap-2">
+          {/* Rotulo Meses em Analises - Centralizado com Laranja e Fonte Maior */}
+          <div className="flex justify-center w-full">
+            <span className="text-sm font-black text-orange-600 uppercase tracking-[0.3em]">
+              MESES EM ANÁLISES
+            </span>
           </div>
-          <div className="flex gap-2 border-l border-slate-200 pl-4">
-            <button onClick={exportAsImage} title="Exportar Imagem" className="p-2.5 text-slate-500 hover:text-blue-600 transition-all"><ImageIcon className="w-5 h-5" /></button>
-            <button onClick={exportAsPDF} title="Exportar PDF" className="p-2.5 bg-slate-900 text-white rounded-lg hover:bg-black transition-all"><FileDown className="w-5 h-5" /></button>
+          
+          <div className="flex items-center gap-4 flex-wrap justify-center">
+            <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-100 shadow-inner">
+              <select value={monthAId} onChange={(e) => setMonthAId(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black outline-none cursor-pointer focus:ring-2 focus:ring-blue-500">
+                {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
+              </select>
+              <span className="text-orange-500 font-black text-xl italic px-2">vs</span>
+              <select value={monthBId} onChange={(e) => setMonthBId(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black outline-none cursor-pointer focus:ring-2 focus:ring-blue-500">
+                {data.map(d => <option key={d.id} value={d.id}>{d.monthYear}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-2 border-l border-slate-200 pl-4">
+              <button onClick={exportAsImage} title="Exportar Imagem" className="p-2.5 text-slate-400 hover:text-blue-600 transition-all"><ImageIcon className="w-5 h-5" /></button>
+              <button onClick={exportAsPDF} title="Exportar PDF" className="p-2.5 bg-slate-900 text-white rounded-lg hover:bg-black transition-all shadow-md"><FileDown className="w-5 h-5" /></button>
+            </div>
           </div>
         </div>
       </div>
@@ -155,31 +193,34 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
             </div>
             <p className="text-2xl lg:text-3xl font-black text-slate-900">R$ {monthB.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
             <div className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black mt-3 ${getDiff(monthA.totalValue, monthB.totalValue) > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-              {getDiff(monthA.totalValue, monthB.totalValue) > 0 ? '↑' : '↓'} {Math.abs(getDiff(monthA.totalValue, monthB.totalValue)).toFixed(2)}% 
+              <span className="mr-1">
+                {getDiff(monthA.totalValue, monthB.totalValue) > 0 ? <ArrowUp className="w-3 h-3 inline" /> : <ArrowDown className="w-3 h-3 inline" />}
+              </span>
+              {Math.abs(getDiff(monthA.totalValue, monthB.totalValue)).toFixed(2)}% 
             </div>
           </div>
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm border-l-8 border-l-emerald-500">
             <div className="flex items-center gap-3 text-emerald-500 mb-4">
               <Users className="w-5 h-5" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Headcount</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">QTD SERVIDORES</span>
             </div>
             <p className="text-3xl font-black text-slate-900">{monthB.effectiveCount + monthB.contractedCount + monthB.commissionedCount}</p>
             <div className="mt-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Δ {(monthB.effectiveCount + monthB.contractedCount + monthB.commissionedCount) - (monthA.effectiveCount + monthA.contractedCount + monthA.commissionedCount)} PESSOAS
+              Var. {(monthB.effectiveCount + monthB.contractedCount + monthB.commissionedCount) - (monthA.effectiveCount + monthA.contractedCount + monthA.commissionedCount)}
             </div>
           </div>
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm border-l-8 border-l-amber-500">
             <div className="flex items-center gap-3 text-amber-500 mb-4">
               <TrendingUp className="w-5 h-5" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ticket Médio</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ticket Medio</span>
             </div>
             <p className="text-3xl font-black text-slate-900">R$ {(monthB.totalValue / (monthB.effectiveCount + monthB.contractedCount + monthB.commissionedCount || 1)).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</p>
-            <p className="text-[10px] text-slate-400 font-black uppercase mt-3 tracking-widest">Investimento p/ Pessoa</p>
+            <p className="text-[10px] text-slate-400 font-black uppercase mt-3 tracking-widest">INVESTIMENTO P/ SERVIDOR</p>
           </div>
         </div>
       )}
 
-      {/* Gráficos e Mix de Investimento */}
+      {/* Graficos e Mix de Investimento */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h3 className="text-sm font-black text-slate-900 uppercase mb-6 tracking-widest border-b border-slate-100 pb-3">Comparativo Selecionado</h3>
@@ -190,8 +231,8 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight="800" axisLine={false} tickLine={false} />
                 <YAxis hide />
                 <Tooltip formatter={(val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
-                <Bar dataKey={labelA} fill="#cbd5e1" radius={[6, 6, 0, 0]} barSize={40}>
-                   <LabelList dataKey={labelA} position="top" formatter={(val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} style={{ fontSize: '10px', fontWeight: '800', fill: '#64748b' }} />
+                <Bar dataKey={labelA} fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={40}>
+                   <LabelList dataKey={labelA} position="top" formatter={(val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} style={{ fontSize: '10px', fontWeight: '800', fill: '#b45309' }} />
                 </Bar>
                 <Bar dataKey={labelB} fill="#2563eb" radius={[6, 6, 0, 0]} barSize={40}>
                    <LabelList dataKey={labelB} position="top" formatter={(val: number) => val.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} style={{ fontSize: '10px', fontWeight: '800', fill: '#1e40af' }} />
@@ -217,20 +258,93 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
         </div>
       </div>
 
-      {/* Planilha de Análise Evolutiva (Agora abaixo dos gráficos) */}
+      {/* Tabela de Detalhamento Operacional */}
+      {monthA && monthB && operationalTotals && (
+        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden">
+          <div className="px-8 py-6 bg-slate-900 text-white">
+             <h3 className="font-black text-xs uppercase tracking-[0.2em]">DETALHAMENTO OPERACIONAL: {monthA.monthYear} VS {monthB.monthYear}</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                  <th className="px-8 py-5">Vinculo</th>
+                  <th className="px-8 py-5 text-center">QTD (Var.)</th>
+                  <th className="px-8 py-5 text-center">
+                    <div className="text-[8px] opacity-60 mb-1 uppercase">{monthA.monthYear}</div>
+                    ANTERIOR (R$)
+                  </th>
+                  <th className="px-8 py-5 text-center">
+                    <div className="text-[8px] text-blue-600 mb-1 uppercase">{monthB.monthYear}</div>
+                    ATUAL (R$)
+                  </th>
+                  <th className="px-8 py-5 text-right">VAR %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {[
+                  { label: 'EFETIVOS', key: 'effective', color: 'text-blue-600' },
+                  { label: 'CONTRATADOS', key: 'contracted', color: 'text-emerald-600' },
+                  { label: 'COMISSIONADOS', key: 'commissioned', color: 'text-amber-500' }
+                ].map((item) => {
+                  const countA = (monthA as any)[`${item.key}Count`] || 0;
+                  const countB = (monthB as any)[`${item.key}Count`] || 0;
+                  const valA = (monthA as any)[`${item.key}Value`] || 0;
+                  const valB = (monthB as any)[`${item.key}Value`] || 0;
+                  const deltaQty = countB - countA;
+                  const varPct = valA ? ((valB - valA) / valA) * 100 : 0;
+
+                  return (
+                    <tr key={item.key} className="hover:bg-slate-50 transition-colors">
+                      <td className={`px-8 py-6 font-black ${item.color} uppercase italic tracking-tighter`}>{item.label}</td>
+                      <td className="px-8 py-6 text-center font-bold text-slate-700">
+                        {countB} <span className={`text-[10px] font-black ml-1 ${deltaQty > 0 ? 'text-red-500' : deltaQty < 0 ? 'text-emerald-500' : 'text-slate-300'}`}>
+                          ({deltaQty >= 0 ? '+' : ''}{deltaQty})
+                        </span>
+                      </td>
+                      <td className="px-8 py-6 text-center font-bold text-slate-400 italic">R$ {valA.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-8 py-6 text-center font-black text-slate-900">R$ {valB.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                      <td className={`px-8 py-6 text-right font-black text-xs ${varPct > 0 ? 'text-red-600' : varPct < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {varPct >= 0 ? '+' : ''}{varPct.toFixed(2)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot className="bg-slate-50/50 border-t-2 border-slate-100">
+                <tr>
+                  <td className="px-8 py-6 font-black text-slate-900 uppercase italic tracking-tighter">TOTAL</td>
+                  <td className="px-8 py-6 text-center font-black text-slate-900">
+                    {operationalTotals.qtyB} <span className={`text-[10px] font-black ml-1 ${operationalTotals.deltaQty > 0 ? 'text-red-500' : operationalTotals.deltaQty < 0 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                      ({operationalTotals.deltaQty >= 0 ? '+' : ''}{operationalTotals.deltaQty})
+                    </span>
+                  </td>
+                  <td className="px-8 py-6 text-center font-black text-slate-500 italic">R$ {operationalTotals.valA.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                  <td className="px-8 py-6 text-center font-black text-blue-900">R$ {operationalTotals.valB.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                  <td className={`px-8 py-6 text-right font-black text-xs ${operationalTotals.varPct > 0 ? 'text-red-600' : operationalTotals.varPct < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {operationalTotals.varPct >= 0 ? '+' : ''}{operationalTotals.varPct.toFixed(2)}%
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Planilha de Analise Evolutiva */}
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden">
         <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center">
           <div className="flex items-center gap-3">
             <TableIcon className="w-6 h-6 text-blue-400" />
             <h3 className="font-black text-sm uppercase tracking-[0.2em]">Planilha de Performance Evolutiva</h3>
           </div>
-          <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Análise Longitudinal de Fluxo</span>
+          <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Analise Longitudinal de Fluxo</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                <th className="px-8 py-5">Competência</th>
+                <th className="px-8 py-5">Competencia</th>
                 <th className="px-8 py-5 text-center">Qtd Total</th>
                 <th className="px-8 py-5 text-center">Var. Qtd (%)</th>
                 <th className="px-8 py-5 text-right">Valor Total (R$)</th>
@@ -273,7 +387,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
             </tbody>
             <tfoot>
               <tr className="bg-slate-100 border-t-2 border-slate-900">
-                <td className="px-8 py-5 font-black text-slate-900 uppercase">TOTAL</td>
+                <td className="px-8 py-5 font-black text-slate-900 uppercase">TOTAL HISTORICO</td>
                 <td className="px-8 py-5 text-center font-black text-slate-900">{grandTotals.count}</td>
                 <td className="px-8 py-5 text-center"></td>
                 <td className="px-8 py-5 text-right font-black text-slate-900">R$ {grandTotals.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
@@ -284,7 +398,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
         </div>
       </div>
 
-      {/* Seção de Análise IA */}
+      {/* Secao de Analise IA */}
       <div className="space-y-6">
         {!analysis && !isGenerating && (
           <div className="bg-slate-900 p-12 rounded-[2.5rem] border border-slate-800 text-center shadow-2xl relative overflow-hidden group">
@@ -293,13 +407,13 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
               <div className="bg-blue-600 p-5 rounded-3xl mb-6 shadow-xl group-hover:scale-110 transition-transform">
                 <BrainCircuit className="w-12 h-12 text-white" />
               </div>
-              <h3 className="text-3xl font-black text-white uppercase tracking-tighter italic">Análise Estratégica AI</h3>
-              <p className="text-slate-400 mt-2 max-w-lg mx-auto font-medium text-lg">Clique no botão abaixo para que nossa inteligência artificial processe os dados da folha e gere um relatório executivo detalhado.</p>
+              <h3 className="text-3xl font-black text-white uppercase tracking-tighter italic">Analise Estrategica AI</h3>
+              <p className="text-slate-400 mt-2 max-w-lg mx-auto font-medium text-lg">Clique no botao abaixo para que nossa inteligencia artificial processe os dados da folha e gere um relatorio executivo detalhado.</p>
               <button 
                 onClick={onGenerateAnalysis}
                 className="mt-10 px-12 py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xl flex items-center gap-3 transition-all shadow-xl shadow-blue-600/30 active:scale-95"
               >
-                <Sparkles className="w-6 h-6" /> GERAR ANÁLISE COMPLETA
+                <Sparkles className="w-6 h-6" /> GERAR ANALISE COMPLETA
               </button>
             </div>
           </div>
@@ -308,15 +422,15 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
         {isGenerating && (
           <div className="bg-white p-16 rounded-[2.5rem] border border-slate-200 text-center shadow-sm flex flex-col items-center">
             <Loader2 className="w-16 h-16 animate-spin text-blue-600 mb-6" />
-            <h3 className="text-2xl font-black text-slate-900 uppercase">Processando Inteligência de RH</h3>
-            <p className="text-slate-500 font-bold uppercase text-xs tracking-widest mt-2 animate-pulse">Cruzando dados e tendências do mercado...</p>
+            <h3 className="text-2xl font-black text-slate-900 uppercase">Processando Inteligencia de RH</h3>
+            <p className="text-slate-500 font-bold uppercase text-xs tracking-widest mt-2 animate-pulse">Cruzando dados e tendencias do mercado...</p>
           </div>
         )}
 
         {error && (
           <div className="bg-red-50 p-8 rounded-2xl flex items-start gap-4 text-red-700 border border-red-200">
             <AlertCircle className="w-8 h-8 shrink-0" />
-            <div><h3 className="font-black text-lg uppercase">Falha na Análise</h3><p className="text-sm font-medium opacity-90">{error}</p></div>
+            <div><h3 className="font-black text-lg uppercase">Falha na Analise</h3><p className="text-sm font-medium opacity-90">{error}</p></div>
           </div>
         )}
 
@@ -328,15 +442,15 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
                   <BrainCircuit className="w-8 h-8 text-blue-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight italic">Relatório IA de RH</h2>
-                  <p className="text-[9px] text-blue-600 font-black uppercase tracking-[0.3em] mt-1">Gestão Estratégica de Capital Humano</p>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight italic">Relatorio IA de RH</h2>
+                  <p className="text-[9px] text-blue-600 font-black uppercase tracking-[0.3em] mt-1">Gestao Estrategica de Capital Humano</p>
                 </div>
               </div>
               <button 
                 onClick={onGenerateAnalysis}
                 className="text-[10px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg hover:bg-blue-50 transition-all no-print"
               >
-                <RefreshCw className="w-3 h-3" /> Atualizar Análise
+                <RefreshCw className="w-3 h-3" /> Atualizar Analise
               </button>
             </div>
             <div className="prose prose-slate max-w-none text-slate-700 relative z-10 text-sm md:text-base leading-relaxed font-medium">
@@ -346,7 +460,8 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ data, analysis, isGeneratin
                 if (line.startsWith('# ')) return <h1 key={i} className="text-3xl font-black text-slate-900 mt-10 mb-6 border-l-8 border-blue-700 pl-4 uppercase tracking-tight">{line.replace('# ', '')}</h1>;
                 if (line.startsWith('## ')) return <h2 key={i} className="text-xl font-black text-slate-800 mt-8 mb-4 flex items-center gap-3"><span className="w-2 h-6 bg-blue-600 rounded-full" />{line.replace('## ', '')}</h2>;
                 if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="ml-6 list-disc mb-3 marker:text-blue-600 font-bold">{line.substring(2)}</li>;
-                if (line.startsWith('🔹') || line.startsWith('✅') || line.startsWith('🚀') || line.startsWith('💡')) return <div key={i} className="my-6 p-6 bg-slate-900 text-white rounded-2xl border-l-8 border-l-blue-600 font-black text-sm leading-relaxed">{line}</div>;
+                // Marcadores de insights IA (convertidos de emoji para símbolo mais simples)
+                if (line.startsWith('>') || line.startsWith('INFO:')) return <div key={i} className="my-6 p-6 bg-slate-900 text-white rounded-2xl border-l-8 border-l-blue-600 font-black text-sm leading-relaxed">{line}</div>;
                 return <p key={i} className="mb-4">{line}</p>;
               })}
             </div>

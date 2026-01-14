@@ -33,7 +33,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
 
   const months = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro', '13º Salário'
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro', '13 Salario'
   ];
 
   const years = Array.from({ length: 2040 - 2000 + 1 }, (_, i) => (2000 + i).toString());
@@ -44,7 +44,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
   }, [newEntry.effectiveValue, newEntry.contractedValue, newEntry.commissionedValue]);
 
   useEffect(() => {
-    const label = selectedMonth === '13º Salário' ? '13º' : selectedMonth;
+    const label = selectedMonth === '13 Salario' ? '13' : selectedMonth;
     setNewEntry(prev => ({ ...prev, monthYear: `${label}/${selectedYear}` }));
   }, [selectedMonth, selectedYear]);
 
@@ -70,7 +70,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
     }
 
     setNewEntry({
-      monthYear: `${selectedMonth === '13º Salário' ? '13º' : selectedMonth}/${selectedYear}`,
+      monthYear: `${selectedMonth === '13 Salario' ? '13' : selectedMonth}/${selectedYear}`,
       totalValue: 0,
       effectiveCount: 0,
       effectiveValue: 0,
@@ -84,7 +84,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
   const handleEdit = (item: PayrollData) => {
     setEditingId(item.id);
     const [month, year] = item.monthYear.split('/');
-    setSelectedMonth(month === '13º' ? '13º Salário' : month);
+    setSelectedMonth(month === '13' ? '13 Salario' : month);
     setSelectedYear(year);
     setNewEntry({
       monthYear: item.monthYear,
@@ -193,7 +193,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
         <div>
           <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
             <Calculator className="w-6 h-6 text-blue-600" />
-            {editingId ? 'Editando Lançamento' : 'Lançamento Mensal'}
+            {editingId ? 'Editando Lancamento' : 'Lancamento Mensal'}
           </h2>
         </div>
         <div className="text-right">
@@ -206,7 +206,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 no-print">
           <div className="md:col-span-2 grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-black text-slate-500 uppercase mb-2 ml-1">Competência</label>
+              <label className="block text-xs font-black text-slate-500 uppercase mb-2 ml-1">Competencia</label>
               <select 
                 value={selectedMonth}
                 onChange={e => setSelectedMonth(e.target.value)}
@@ -314,7 +314,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
               onClick={handleAddOrUpdate}
               className={`flex-1 ${editingId ? 'bg-emerald-600' : 'bg-blue-600'} text-white font-black py-4 rounded-2xl transition-all shadow-xl active:scale-95 text-lg`}
             >
-              {editingId ? 'Salvar Alterações' : 'Adicionar Competência'}
+              {editingId ? 'Salvar Alteracoes' : 'Adicionar Competencia'}
             </button>
           </div>
         </div>
@@ -322,7 +322,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
         <div className="mt-12" ref={tableRef}>
           <div className="flex justify-between items-center mb-5">
             <h3 className="text-sm font-black text-slate-400 uppercase flex items-center gap-3 tracking-[0.2em]">
-              <Calendar className="w-5 h-5 text-blue-500" /> HISTÓRICO DE LANÇAMENTOS
+              <Calendar className="w-5 h-5 text-blue-500" /> HISTORICO DE LANCAMENTOS
             </h3>
           </div>
           
@@ -330,7 +330,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
             <table className="w-full text-left">
               <thead className="bg-slate-900 text-white border-b border-slate-800">
                 <tr>
-                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest">PERÍODO</th>
+                  <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest">PERIODO</th>
                   <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-center text-blue-400">COLABORADORES</th>
                   <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-right">TOTAL (R$)</th>
                   <th className="py-5 px-6 text-right no-print"></th>
@@ -339,7 +339,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
               <tbody className="divide-y divide-slate-100">
                 {data.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">Nenhum lançamento registrado</td>
+                    <td colSpan={4} className="py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">Nenhum lancamento registrado</td>
                   </tr>
                 ) : data.map((item) => (
                   <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
