@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ResellerUser, CompanyData } from '../types';
-import { Users, UserPlus, Trash2, Edit3, Search, X, Lock, Eye, EyeOff, RefreshCw, Cloud, CheckCircle, Globe, ShieldAlert } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit3, Search, X, Lock, Eye, EyeOff, RefreshCw, Cloud, CheckCircle, Globe, ShieldAlert, Clock } from 'lucide-react';
 import { supabaseService } from '../services/supabase';
 
 interface UserManagementProps {
@@ -132,7 +132,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredUsers.map(user => (
-                  <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
+                  <tr key={user.id} className={`hover:bg-blue-50/30 transition-colors group ${user.status === 'Inativo' ? 'bg-amber-50/20' : ''}`}>
                     <td className="px-8 py-6">
                       <div>
                         <p className="font-black text-slate-900">{user.name}</p>
@@ -156,8 +156,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
                       <span className="text-xs font-black text-slate-600 uppercase truncate max-w-[150px] block">{user.company}</span>
                     </td>
                     <td className="px-8 py-6">
-                      <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${user.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                        {user.status}
+                      <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1 w-fit ${user.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700 ring-1 ring-amber-300'}`}>
+                        {user.status === 'Inativo' && <Clock className="w-3 h-3" />}
+                        {user.status === 'Inativo' ? 'Pendente' : user.status}
                       </span>
                     </td>
                     <td className="px-8 py-6 text-right space-x-2">
@@ -194,9 +195,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ companies }) => {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status</label>
-                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none">
-                    <option value="Ativo">ATIVO</option>
-                    <option value="Inativo">INATIVO</option>
+                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className={`w-full px-5 py-4 bg-slate-50 border rounded-2xl font-black outline-none transition-all ${formData.status === 'Ativo' ? 'border-emerald-200 text-emerald-600' : 'border-amber-200 text-amber-600'}`}>
+                    <option value="Ativo">LIBERAR ACESSO (ATIVO)</option>
+                    <option value="Inativo">BLOQUEADO / PENDENTE</option>
                   </select>
                 </div>
               </div>

@@ -233,7 +233,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
 
           <div className="p-5 bg-blue-50/80 rounded-2xl border border-blue-100 space-y-4 shadow-sm transition-all hover:shadow-md">
             <h4 className="text-sm font-black text-blue-800 uppercase flex items-center gap-2">
-              <Users className="w-4 h-4" /> Efetivos (CLT)
+              <Users className="w-4 h-4" /> Efetivos
             </h4>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -259,7 +259,7 @@ const DataForm: React.FC<DataFormProps> = ({ onDataChange, onDeleteEntry, data, 
 
           <div className="p-5 bg-emerald-50/80 rounded-2xl border border-emerald-100 space-y-4 shadow-sm transition-all hover:shadow-md">
             <h4 className="text-sm font-black text-emerald-800 uppercase flex items-center gap-2">
-              <Briefcase className="w-4 h-4" /> Contratados / PJ
+              <Briefcase className="w-4 h-4" /> Contratados
             </h4>
             <div className="grid grid-cols-2 gap-3">
               <div>

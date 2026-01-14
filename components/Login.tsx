@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Lock, Mail, Loader2, AlertCircle, Eye, EyeOff, Globe, UserPlus, ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Lock, Mail, Loader2, AlertCircle, Eye, EyeOff, Globe, UserPlus, ArrowLeft, CheckCircle2, ShieldCheck, Clock } from 'lucide-react';
 import { findUserByEmail } from '../services/authService';
 import { supabaseService } from '../services/supabase';
 import { ResellerUser } from '../types';
@@ -69,17 +69,23 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           email: normalizedEmail,
           password: cleanPassword,
           role: first ? 'admin' : 'reseller',
-          company: first ? 'RH TOTAL Central' : 'Novo Gestor',
-          status: 'Ativo',
+          company: first ? 'RH TOTAL Central' : 'Novo Cadastro',
+          status: first ? 'Ativo' : 'Inativo', // Somente o primeiro admin entra Ativo
           expirationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
         };
 
         await supabaseService.saveProfile(newUser);
-        alert(first 
-          ? 'Conta de Administrador criada com sucesso!' 
-          : 'Conta criada com sucesso! Aguarde liberação.'
-        );
-        onLogin(newUser.name, newUser.role, newUser.linkedCompanyId);
+        
+        if (first) {
+          alert('Conta de Administrador criada com sucesso! Você já pode acessar.');
+          onLogin(newUser.name, newUser.role, newUser.linkedCompanyId);
+        } else {
+          alert('Cadastro realizado com sucesso! Para sua segurança, um administrador precisa liberar seu acesso antes do primeiro login.');
+          setIsRegistering(false);
+          setEmail('');
+          setPassword('');
+          setName('');
+        }
 
       } else {
         if (normalizedEmail === 'admin@gestorpro.com' && cleanPassword === 'admin123') {
@@ -92,7 +98,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         if (userMatch) {
           if (userMatch.password === cleanPassword) {
             if (userMatch.status === 'Inativo') {
-              setError('Conta inativada pelo administrador.');
+              setError('ACESSO PENDENTE: Seu cadastro ainda não foi liberado pelo administrador.');
             } else {
               onLogin(userMatch.name, userMatch.role || 'reseller', userMatch.linkedCompanyId);
             }
@@ -130,15 +136,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           
           <form onSubmit={handleSubmit} className="p-10 pt-0 space-y-6">
             {error && (
-              <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black border border-red-100 flex items-center gap-3 animate-shake">
-                <AlertCircle className="w-4 h-4 shrink-0" /> {error.toUpperCase()}
+              <div className={`p-4 rounded-2xl text-[10px] font-black border flex items-center gap-3 animate-shake ${error.includes('PENDENTE') ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                {error.includes('PENDENTE') ? <Clock className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                {error.toUpperCase()}
               </div>
             )}
 
             {isRegistering && isFirstUser && (
               <div className="bg-cyan-50 text-cyan-700 p-4 rounded-2xl text-[10px] font-black border border-cyan-100 flex items-start gap-3">
                 <ShieldCheck className="w-5 h-5 shrink-0" />
-                <span>VOCÊ É O PRIMEIRO USUÁRIO. ESTA CONTA SERÁ CONFIGURADA COMO <b className="text-cyan-900 uppercase tracking-tighter">Administrador Master</b>.</span>
+                <span>VOCÊ É O PRIMEIRO USUÁRIO. ESTA CONTA SERÁ CONFIGURADA COMO <b className="text-cyan-900 uppercase tracking-tighter">Administrador Master</b> E TERÁ ACESSO IMEDIATO.</span>
               </div>
             )}
             
@@ -172,9 +179,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-black text-white font-black py-5 rounded-2xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 shadow-xl shadow-slate-900/10">
               {loading ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> {isRegistering ? 'CRIANDO...' : 'AUTENTICANDO...'}</>
+                <><Loader2 className="w-5 h-5 animate-spin" /> {isRegistering ? 'PROCESSANDO...' : 'AUTENTICANDO...'}</>
               ) : (
-                isRegistering ? <><CheckCircle2 className="w-5 h-5" /> CONCLUIR CADASTRO</> : 'ENTRAR NO DASHBOARD'
+                isRegistering ? <><CheckCircle2 className="w-5 h-5" /> SOLICITAR CADASTRO</> : 'ENTRAR NO DASHBOARD'
               )}
             </button>
 
