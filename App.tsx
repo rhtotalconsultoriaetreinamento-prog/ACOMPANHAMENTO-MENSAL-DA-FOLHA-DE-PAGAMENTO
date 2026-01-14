@@ -9,7 +9,6 @@ import { PayrollData, AppTab, AuthState, CompanyData } from './types';
 import { analyzePayroll } from './services/geminiService';
 import { supabaseService } from './services/supabase';
 import { 
-  BrainCircuit, 
   LayoutDashboard, 
   PlusCircle, 
   Menu,
@@ -30,6 +29,16 @@ const STORAGE_KEYS = {
   TAB: 'gestorpro_active_tab',
   COLLAPSED: 'gestorpro_sidebar_collapsed'
 };
+
+// Componente de Logo RH TOTAL (Baseado na imagem enviada)
+const RHTotalLogo: React.FC<{ className?: string }> = ({ className = "w-10 h-10" }) => (
+  <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="50" r="48" stroke="currentColor" strokeWidth="4" className="text-cyan-500/30" />
+    <circle cx="35" cy="30" r="8" fill="currentColor" className="text-cyan-600" />
+    <circle cx="65" cy="30" r="8" fill="currentColor" className="text-teal-600" />
+    <path d="M20 60C20 45 40 45 50 60C60 45 80 45 80 60C80 75 60 75 50 60C40 75 20 75 20 60Z" fill="currentColor" className="text-cyan-500" />
+  </svg>
+);
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>(() => {
@@ -138,7 +147,6 @@ const App: React.FC = () => {
   const handleUpdatePayroll = async (entries: PayrollData[]) => {
     if (!activeCompanyId) return;
     
-    // Identifica se houve adição ou edição baseada no histórico local
     const currentEntries = activeCompany?.payrollEntries || [];
     const changedEntry = entries.find(e => {
       const existing = currentEntries.find(ce => ce.id === e.id);
@@ -176,8 +184,8 @@ const App: React.FC = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white font-black">
-        <BrainCircuit className="w-16 h-16 text-blue-500 animate-bounce mb-6" />
-        <p className="uppercase tracking-[0.3em] text-[10px] opacity-50 text-center">Sincronizando Nuvem...</p>
+        <RHTotalLogo className="w-20 h-20 text-cyan-500 animate-pulse mb-6" />
+        <p className="uppercase tracking-[0.3em] text-[10px] opacity-50 text-center">Iniciando RH TOTAL...</p>
       </div>
     );
   }
@@ -189,8 +197,8 @@ const App: React.FC = () => {
       <aside className={`fixed inset-y-0 left-0 z-50 bg-slate-900 text-white transform transition-all duration-300 md:static ${isCollapsed ? 'w-20' : 'w-72'} ${isMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="h-full flex flex-col">
           <div className={`p-6 flex items-center ${isCollapsed ? 'justify-center' : 'gap-4'} border-b border-slate-800 transition-all`}>
-            <BrainCircuit className="w-8 h-8 text-blue-500 shrink-0" />
-            {!isCollapsed && <h1 className="text-xl font-black truncate">GestorPro</h1>}
+            <RHTotalLogo className="w-8 h-8 text-cyan-400 shrink-0" />
+            {!isCollapsed && <h1 className="text-xl font-black truncate tracking-tighter uppercase italic">RH TOTAL</h1>}
           </div>
 
           <nav className="flex-1 p-3 space-y-1 mt-4">
@@ -204,22 +212,22 @@ const App: React.FC = () => {
                 key={tab.id}
                 onClick={() => {setActiveTab(tab.id as AppTab); setIsMenuOpen(false);}} 
                 title={isCollapsed ? tab.label : ''}
-                className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-4 px-5'} py-4 rounded-xl transition-all ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-800'}`}
+                className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-4 px-5'} py-4 rounded-xl transition-all ${activeTab === tab.id ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-600/20' : 'text-slate-400 hover:bg-slate-800'}`}
               >
                 <tab.icon className="w-5 h-5 shrink-0" />
-                {!isCollapsed && <span className="font-bold truncate">{tab.label}</span>}
+                {!isCollapsed && <span className="font-bold truncate uppercase text-xs">{tab.label}</span>}
               </button>
             ))}
           </nav>
 
           <div className="p-3 border-t border-slate-800">
             <div className={`p-3 rounded-xl border mb-2 text-center transition-all ${
-              cloudStatus === 'connected' ? 'bg-blue-500/10 border-blue-500/30' : 
+              cloudStatus === 'connected' ? 'bg-cyan-500/10 border-cyan-500/30' : 
               cloudStatus === 'error' ? 'bg-red-500/10 border-red-500/30' : 
               'bg-amber-500/10 border-amber-500/30'
             }`}>
               <p className={`text-[9px] font-black uppercase tracking-widest mb-1 flex items-center justify-center gap-2 ${
-                cloudStatus === 'connected' ? 'text-blue-400' : 
+                cloudStatus === 'connected' ? 'text-cyan-400' : 
                 cloudStatus === 'error' ? 'text-red-400' : 
                 'text-amber-500'
               }`}>
@@ -258,11 +266,11 @@ const App: React.FC = () => {
            <div className="flex items-center gap-3">
              {activeCompany && !isCollapsed && (
                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg">
-                 <Building2 className="w-4 h-4 text-blue-600" />
+                 <Building2 className="w-4 h-4 text-cyan-600" />
                  <span className="text-xs font-black text-slate-600 uppercase truncate max-w-[150px]">{activeCompany.name}</span>
                </div>
              )}
-             <button onClick={loadData} className="p-2 text-slate-400 hover:text-blue-600 transition-all"><RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} /></button>
+             <button onClick={loadData} className="p-2 text-slate-400 hover:text-cyan-600 transition-all"><RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} /></button>
            </div>
         </header>
 
